@@ -1,0 +1,41 @@
+model:
+ type: FunnelTransformer
+ use_pretrained: false
+ config:
+  d_model: 384
+  n_head: 6
+  d_inner: 1536
+tokenizer:
+ use_pretrained: true
+hyperparameters:
+ batch_size: 1024
+ seq_len: 24
+storage_path: storage
+training:
+ device: cpu
+ path_to_data: data/train_transactions_single.txt
+ checkpoint_dir: storage/checkpoint
+ n_epochs: 100
+ n_warmup_epochs: 30
+ optimizer_parameters:
+  learning_rate: 1e-4
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  weight_decay: 0.01
+validation:
+ path_to_data: data/val_transactions_single.txt
+ metrics_dir: storage/metrics
+ path_to_storage: storage
+ period: 10
+ top_k: 10
+ save_graphs: true
+ show_graphs: true
+ graphs_dir: storage/graphs
+ metrics: 
+  reciprocal_rank: true
+  simplified_dcg: true
+  precision: true
+  recall: true
+  f_score: true
+  hit: true
+save_trained_model: true
