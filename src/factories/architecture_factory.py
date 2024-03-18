@@ -6,7 +6,6 @@ from math import ceil
 
 import torch
 import transformers
-import yaml
 from transformers import (
     DataCollatorForLanguageModeling,
     LineByLineTextDataset,
@@ -21,48 +20,52 @@ from callbacks import callbacks
 from utils import utils
 
 
-#dir_path: str = os.path.dirname(os.path.realpath(__file__))
-#root_path: pathlib.Path = pathlib.Path(dir_path).parents[1]
-
 working_dir = pathlib.Path(os.getcwd())
-
-print(working_dir)
-print("---------------------")
 
 
 class ArchitectureFactory(ABC):
+    """
+    Base class for model creation. It's usually automatically created by the AbstractFactory.
+
+    Args:
+        ABC (config (dict[str, tp.Any]): parsed config with all the required information.
+    """
     def __init__(self, config: dict[str, tp.Any]):
+
         self.config: dict[str, tp.Any] = config
 
+        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
+        utils.create_dir(storage_path)
+
     @abstractmethod
-    def construct(self) -> tuple[
-        PreTrainedModel,
-        PreTrainedTokenizer | PreTrainedTokenizerFast,
-        TrainingArguments,
-        list[TrainerCallback],
-    ]:
+    def create_model(self) -> PreTrainedModel:
+        """
+        This method can be used to create a proper model.        
+
+        Returns:
+            PreTrainedModel: created model.
+        """
         pass
 
-    def _create_collator_and_datasets(
-        self, tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast
-    ) -> tuple[
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-    ]:
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
+    @abstractmethod
+    def create_tokenizer(self) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
+        """
+        This method can be used to create a proper tokenizer.  
 
-        dataset_train: LineByLineTextDataset = LineByLineTextDataset(
-            tokenizer=tokenizer,
-            file_path=working_dir.joinpath(self.config["training"]["path_to_data"]),
-            block_size=seq_len + 2,
-        )
+        Returns:
+            PreTrainedTokenizer | PreTrainedTokenizerFast: created tokenizer.
+        """
+        pass
 
-        dataset_eval: LineByLineTextDataset = LineByLineTextDataset(
-            tokenizer=tokenizer,
-            file_path=working_dir.joinpath(self.config["validation"]["path_to_data"]),
-            block_size=seq_len + 2,
+    def create_collator(self) -> DataCollatorForLanguageModeling:
+        """
+        This method can be used to create a data collator which later will be using for training. 
+
+        Returns:
+            DataCollatorForLanguageModeling: created data collator.
+        """
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
+            self.create_tokenizer()
         )
 
         data_collator: DataCollatorForLanguageModeling = (
@@ -74,23 +77,43 @@ class ArchitectureFactory(ABC):
             )
         )
 
-        return (
-            data_collator,
-            dataset_train,
-            dataset_eval,
+        return data_collator
+
+    def create_dataset(self, mode: str) -> LineByLineTextDataset:
+        """
+        This method can be used to create a training or validation dataset.
+        All you need is to specify proper 'mode' value so factory can find proper information in the config.
+
+        Args:
+            mode (str): mode can be either 'validation' or 'training'
+
+        Returns:
+            LineByLineTextDataset: line by line dataset.
+        """
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
+            self.create_tokenizer()
         )
 
-    def _create_callbacks(
-        self, tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast
-    ) -> list[TrainerCallback]:
+        dataset: LineByLineTextDataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=working_dir.joinpath(self.config[mode]["path_to_data"]),
+            block_size=self.config["hyperparameters"]["seq_len"] + 2,
+        )
+
+        return dataset
+
+    def create_callbacks(self) -> list[TrainerCallback]:
+        """
+        This method can be used to create a list of callback based on the config.
+
+        Returns:
+            list[TrainerCallback]: list of selected callbacks.
+        """
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
+            self.create_tokenizer()
+        )
+
         storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        device: torch.device = torch.device(
-            self.config["training"]["device"] if torch.cuda.is_available() else "cpu"
-        )
 
         used_callbacks: list[transformers.TrainerCallback] = []
 
@@ -101,791 +124,560 @@ class ArchitectureFactory(ABC):
                 break
 
         if compute_metrics:
+            device: torch.device = torch.device(
+                self.config["training"]["device"] if torch.cuda.is_available() else "cpu"
+            )
+
             used_callbacks.append(
-                callbacks.MetricComputerValidationCallback(
+                callbacks.MetricComputerCallback(
                     path_to_data=working_dir.joinpath(
                         self.config["validation"]["path_to_data"]
                     ),
-                    path_to_storage=storage_path.joinpath("metrics"),
+                    metrics_storage_dir=storage_path.joinpath("metrics"),
                     tokenizer=tokenizer,
                     use_metrics=self.config["validation"]["metrics"],
                     device=device,
                     period=self.config["validation"]["period"],
                     top_k=self.config["validation"]["top_k"],
-                    batch_size=batch_size,
-                    seq_len=seq_len,
+                    batch_size=self.config["hyperparameters"]["batch_size"],
+                    seq_len=self.config["hyperparameters"]["seq_len"],
                 ),
             )
 
         if self.config["validation"]["save_graphs"]:
             used_callbacks.append(
-                callbacks.SaveGraphsCallback(storage_path=storage_path)
+                callbacks.SaveGraphsCallback(
+                    graph_storage_dir=storage_path.joinpath("graphs"),
+                    metrics_storage_dir=storage_path.joinpath("metrics"),
+                )
             )
+
+        used_callbacks.append(
+            callbacks.SaveLossHistoryCallback(
+                loss_storage_dir=storage_path.joinpath("loss"),
+            )
+        )
 
         if self.config["save_trained_model"]:
             used_callbacks.append(
-                callbacks.SaveLossHistoryCallback(storage_path=storage_path)
+                callbacks.FinalCheckpointCallback(
+                    checkpoint_dir=storage_path.joinpath("final_checkpoint")
+                )
             )
 
         return used_callbacks
 
+    def create_training_args(self) -> TrainingArguments:
+        """
+        This method can be used to create a training args based on the config.
 
-C = tp.TypeVar("C", bound=ArchitectureFactory)
+        Returns:
+            TrainingArguments: training arg which will be later used by trainer.
+        """
+        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
 
-NAME_TO_CLASS: dict[str, tp.Type[C]] = {}  # название не лучшее, просто для примера
+        checkpoint_path: pathlib.Path = storage_path.joinpath("checkpoint")
+
+        utils.create_dir(checkpoint_path)
+        utils.delete_files(checkpoint_path)
+
+        training_args = TrainingArguments(
+            output_dir=str(checkpoint_path),
+            overwrite_output_dir=True,
+            num_train_epochs=self.config["training"]["n_epochs"],
+            per_device_train_batch_size=self.config["hyperparameters"]["batch_size"],
+            per_device_eval_batch_size=self.config["hyperparameters"]["batch_size"],
+            evaluation_strategy="epoch",
+            logging_strategy="epoch",
+            save_strategy="epoch",
+            save_total_limit=self.config["training"]["n_checkpoints"],
+            prediction_loss_only=True,
+            lr_scheduler_type="cosine",
+            max_grad_norm=1.0,
+            report_to="none",
+            **self.config["training"]["optimizer_parameters"],
+        )
+
+        return training_args
+
+    def set_warmup_epochs(
+        self, training_args: TrainingArguments, dataset_train: LineByLineTextDataset
+    ) -> None:
+        """
+        Training args don't have warmup_epochs argument, only warmup_steps, but number of steps depends on the
+        length of dataloader so we need a way to compute warmup_steps by warmup_epochs.
+
+        Args:
+            training_args (TrainingArguments): Training args create by corresponding method.
+            dataset_train (LineByLineTextDataset): Train dataset so we can get it's len to compute warmup_steps.
+        """
+        batch_size: int = self.config["hyperparameters"]["batch_size"]
+        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
+
+        training_args.warmup_steps = (
+            ceil(len(dataset_train) / batch_size) * n_warmup_epochs
+        )
 
 
-def architecture(cls: tp.Type[C]) -> tp.Type[C]:
-    NAME_TO_CLASS[cls.__name__[:-7]] = cls
+# C = tp.TypeVar("C", bound=ArchitectureFactory)
+
+CLASS_REGISTER: dict[str, tp.Type[ArchitectureFactory]] = {}
+
+
+def architecture(cls: tp.Type[ArchitectureFactory]) -> tp.Type[ArchitectureFactory]:
+    """
+    This decorator is used to register an architucture so Abstract Factory can create a proper model 
+    without any ifs inside its body.
+
+    Args:
+        cls (tp.Type[ArchitectureFactory]): a class to register.
+
+    Returns:
+        tp.Type[ArchitectureFactory]: registered class.
+    """
+    CLASS_REGISTER[cls.__name__[:-7]] = cls
     return cls
 
 
 @architecture
 class BERTFactory(ArchitectureFactory):
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
+    def __init__(self, config: dict[str, tp.Any]):
+        super().__init__(config)
 
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.BertTokenizer:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.BertTokenizer = (
-                transformers.BertTokenizer.from_pretrained(
-                    "windowsartes/bert_tokenizer"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.BertTokenizer = (
+                    transformers.BertTokenizer.from_pretrained(
+                        "windowsartes/bert_tokenizer"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.BertTokenizer.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.BertForMaskedLM:
+        tokenizer: transformers.BertTokenizer = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.BertForMaskedLM = (
-                transformers.BertForMaskedLM.from_pretrained("windowsartes/bert")
-            )
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.BertForMaskedLM = (
+                    transformers.BertForMaskedLM.from_pretrained("windowsartes/bert")
+                )
+            else:
+                model = transformers.BertForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.BertConfig = transformers.BertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
                 **self.config["model"]["config"],
             )
-            model: transformers.BertForMaskedLM = transformers.BertForMaskedLM(
-                config=config
-            )
+            model = transformers.BertForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=storage_path.joinpath("checkpoint"),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class ConvBERTFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.ConvBertTokenizer:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.ConvBertTokenizer = (
-                transformers.ConvBertTokenizer.from_pretrained(
-                    "windowsartes/convbert_tokenizer"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.ConvBertTokenizer = (
+                    transformers.ConvBertTokenizer.from_pretrained(
+                        "windowsartes/convbert_tokenizer"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.ConvBertTokenizer.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.ConvBertForMaskedLM:
+        tokenizer: transformers.ConvBertTokenizer = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.ConvBertForMaskedLM = (
-                transformers.ConvBertForMaskedLM.from_pretrained(
-                    "windowsartes/convbert"
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.ConvBertForMaskedLM = (
+                    transformers.ConvBertForMaskedLM.from_pretrained(
+                        "windowsartes/convbert"
+                    )
                 )
-            )
+            else:
+                model = transformers.ConvBertForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.ConvBertConfig = transformers.ConvBertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
                 **self.config["model"]["config"],
             )
-            model: transformers.ConvBertForMaskedLM = transformers.ConvBertForMaskedLM(
-                config=config
-            )
+            model = transformers.ConvBertForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class DeBERTaFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.DebertaTokenizerFast:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.DebertaTokenizerFast = (
-                transformers.DebertaTokenizerFast.from_pretrained(
-                    "windowsartes/deberta_tokenizer_fast"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.DebertaTokenizerFast = (
+                    transformers.DebertaTokenizerFast.from_pretrained(
+                        "windowsartes/deberta_tokenizer_fast"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.DebertaTokenizerFast.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.DebertaForMaskedLM:
+        tokenizer: transformers.DebertaTokenizerFast = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.DebertaForMaskedLM = (
-                transformers.DebertaForMaskedLM.from_pretrained("windowsartes/deberta")
-            )
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.DebertaForMaskedLM = (
+                    transformers.DebertaForMaskedLM.from_pretrained(
+                        "windowsartes/deberta"
+                    )
+                )
+            else:
+                model = transformers.DebertaForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.DebertaConfig = transformers.DebertaConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
                 **self.config["model"]["config"],
             )
-            model: transformers.DebertaForMaskedLM = transformers.DebertaForMaskedLM(
-                config=config
-            )
+            model = transformers.DebertaForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class FNetFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.FNetTokenizerFast:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.FNetTokenizerFast = (
-                transformers.FNetTokenizerFast.from_pretrained(
-                    "windowsartes/fnet_tokenizer_fast"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.FNetTokenizerFast = (
+                    transformers.FNetTokenizerFast.from_pretrained(
+                        "windowsartes/fnet_tokenizer_fast"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.FNetTokenizerFast.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.FNetForMaskedLM:
+        tokenizer: transformers.FNetTokenizerFast = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.FNetForMaskedLM = (
-                transformers.FNetForMaskedLM.from_pretrained("windowsartes/fnet")
-            )
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.FNetForMaskedLM = (
+                    transformers.FNetForMaskedLM.from_pretrained("windowsartes/fnet")
+                )
+            else:
+                model = transformers.FNetForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.FNetConfig = transformers.FNetConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
                 **self.config["model"]["config"],
             )
-            model: transformers.FNetForMaskedLM = transformers.FNetForMaskedLM(
-                config=config
-            )
+            model = transformers.FNetForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class FunnelTransformerFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.FunnelTokenizer:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.FunnelTokenizer = (
-                transformers.FunnelTokenizer.from_pretrained(
-                    "windowsartes/funnel_tokenizer"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.FunnelTokenizer = (
+                    transformers.FunnelTokenizer.from_pretrained(
+                        "windowsartes/funnel_tokenizer"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.FunnelTokenizer.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.FunnelForMaskedLM:
+        tokenizer: transformers.FunnelTokenizer = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.FunnelForMaskedLM = (
-                transformers.FunnelForMaskedLM.from_pretrained("windowsartes/funnel")
-            )
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.FunnelForMaskedLM = (
+                    transformers.FunnelForMaskedLM.from_pretrained(
+                        "windowsartes/funnel"
+                    )
+                )
+            else:
+                model = transformers.FunnelForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
             config: transformers.FunnelConfig = transformers.FunnelConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 **self.config["model"]["config"],
             )
-            model: transformers.FunnelForMaskedLM = transformers.FunnelForMaskedLM(
-                config=config
-            )
+            model = transformers.FunnelForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class MobileBERTFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.MobileBertTokenizer:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.MobileBertTokenizer = (
-                transformers.MobileBertTokenizer.from_pretrained(
-                    "windowsartes/mobilebert_tokenizer"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.MobileBertTokenizer = (
+                    transformers.MobileBertTokenizer.from_pretrained(
+                        "windowsartes/mobilebert_tokenizer"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.MobileBertTokenizer.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.MobileBertForMaskedLM:
+        tokenizer: transformers.FunnelTokenizer = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.MobileBertForMaskedLM = (
-                transformers.MobileBertForMaskedLM.from_pretrained(
-                    "windowsartes/mobilebert"
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.MobileBertForMaskedLM = (
+                    transformers.MobileBertForMaskedLM.from_pretrained(
+                        "windowsartes/mobilebert"
+                    )
                 )
-            )
+            else:
+                model = transformers.MobileBertForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.MobileBertConfig = transformers.MobileBertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
                 **self.config["model"]["config"],
             )
-            model: transformers.MobileBertForMaskedLM = (
-                transformers.MobileBertForMaskedLM(config=config)
-            )
+            model = transformers.MobileBertForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class RoBERTaFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.RobertaTokenizerFast:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.RobertaTokenizerFast = (
-                transformers.RobertaTokenizerFast.from_pretrained(
-                    "windowsartes/roberta_tokenizer_fast"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.RobertaTokenizerFast = (
+                    transformers.RobertaTokenizerFast.from_pretrained(
+                        "windowsartes/roberta_tokenizer_fast"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.RobertaTokenizerFast.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.RobertaForMaskedLM:
+        tokenizer: transformers.RobertaTokenizerFast = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.RobertaForMaskedLM = (
-                transformers.RobertaForMaskedLM.from_pretrained("windowsartes/roberta")
-            )
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.RobertaForMaskedLM = (
+                    transformers.RobertaForMaskedLM.from_pretrained(
+                        "windowsartes/roberta"
+                    )
+                )
+            else:
+                model = transformers.RobertaForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.RobertaConfig = transformers.RobertaConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 4,
                 **self.config["model"]["config"],
             )
-            model: transformers.RobertaForMaskedLM = transformers.RobertaForMaskedLM(
-                config=config
-            )
+            model = transformers.RobertaForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class RoFormerFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.RoFormerTokenizer:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.RoFormerTokenizer = (
-                transformers.RoFormerTokenizer.from_pretrained(
-                    "windowsartes/roformer_tokenizer"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.RoFormerTokenizer = (
+                    transformers.RoFormerTokenizer.from_pretrained(
+                        "windowsartes/roformer_tokenizer"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.RoFormerTokenizer.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.RoFormerForMaskedLM:
+        tokenizer: transformers.RoFormerTokenizer = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.RoFormerForMaskedLM = (
-                transformers.RoFormerForMaskedLM.from_pretrained(
-                    "windowsartes/roformer"
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.RoFormerForMaskedLM = (
+                    transformers.RoFormerForMaskedLM.from_pretrained(
+                        "windowsartes/roformer"
+                    )
                 )
-            )
+            else:
+                model = transformers.RoFormerForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.RoFormerConfig = transformers.RoFormerConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 4,
                 **self.config["model"]["config"],
             )
-            model: transformers.RoFormerForMaskedLM = transformers.RoFormerForMaskedLM(
-                config=config
-            )
+            model = transformers.RoFormerForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
 
 
 @architecture
 class XLMRoBERTaFactory(ArchitectureFactory):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        super().__init__(config)
 
-    def construct(
-        self,
-    ) -> tuple[
-        PreTrainedModel,
-        TrainingArguments,
-        DataCollatorForLanguageModeling,
-        LineByLineTextDataset,
-        LineByLineTextDataset,
-        list[TrainerCallback],
-    ]:
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        for name in ["checkpoint", "metrics", "graphs", "loss"]:
-            utils.create_dir(storage_path.joinpath(name))
-
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
-
-        n_epochs: int = self.config["training"]["n_epochs"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
-
+    def create_tokenizer(self) -> transformers.XLMRobertaTokenizerFast:
         if self.config["tokenizer"]["use_pretrained"]:
-            tokenizer: transformers.XLMRobertaTokenizerFast = (
-                transformers.XLMRobertaTokenizerFast.from_pretrained(
-                    "windowsartes/xlmroberta_tokenizer_fast"
+            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+                tokenizer: transformers.XLMRobertaTokenizerFast = (
+                    transformers.XLMRobertaTokenizerFast.from_pretrained(
+                        "windowsartes/xlmroberta_tokenizer_fast"
+                    )
                 )
-            )
+            else:
+                tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(
+                    working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_saved_tokenizer"]
+                    )
+                )
         else:
-            pass
+            raise NotImplementedError
+
+        return tokenizer
+
+    def create_model(self) -> transformers.XLMRobertaForMaskedLM:
+        tokenizer: transformers.XLMRobertaTokenizerFast = self.create_tokenizer()
 
         if self.config["model"]["use_pretrained"]:
-            model: transformers.XLMRobertaForMaskedLM = (
-                transformers.XLMRobertaForMaskedLM.from_pretrained(
-                    "windowsartes/xlmroberta"
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.XLMRobertaForMaskedLM = (
+                    transformers.XLMRobertaForMaskedLM.from_pretrained(
+                        "windowsartes/xlmroberta"
+                    )
                 )
-            )
+            else:
+                model = transformers.XLMRobertaForMaskedLM.from_pretrained(
+                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                )
         else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
             config: transformers.XLMRobertaConfig = transformers.XLMRobertaConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 4,
                 **self.config["model"]["config"],
             )
-            model: transformers.XLMRobertaForMaskedLM = (
-                transformers.XLMRobertaForMaskedLM(config=config)
-            )
+            model = transformers.XLMRobertaForMaskedLM(config=config)
 
-        data_collator, dataset_train, dataset_eval = self._create_collator_and_datasets(
-            tokenizer
-        )
-
-        n_warmup_steps: int = ceil(len(dataset_train) / batch_size) * n_warmup_epochs
-
-        training_args = transformers.TrainingArguments(
-            output_dir=working_dir.joinpath(self.config["training"]["checkpoint_dir"]),
-            overwrite_output_dir=True,
-            num_train_epochs=n_epochs,
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            evaluation_strategy="epoch",
-            logging_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=1,
-            prediction_loss_only=True,
-            warmup_steps=n_warmup_steps,
-            report_to="none",
-            **self.config["training"]["optimizer_parameters"],
-        )
-
-        used_callbacks = self._create_callbacks(tokenizer)
-
-        return (
-            model,
-            training_args,
-            data_collator,
-            dataset_train,
-            dataset_eval,
-            used_callbacks,
-        )
+        return model
