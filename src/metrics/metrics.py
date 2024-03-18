@@ -1,8 +1,16 @@
 import numpy as np
 import torch
+import typing as tp
 from transformers import PreTrainedTokenizer, PreTrainedModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+
+class FillMaskPipelineResult(tp.TypedDict):
+    score: float
+    token: int
+    token_str: str
+
 
 class MetricComputer:
     """
@@ -189,7 +197,7 @@ class MetricComputer:
             for batch_inputs, batch_answers in tqdm(self.dataloader):
                 outputs = model(**batch_inputs)
 
-                results: list[list[dict[str, float | int | str]]] = []
+                results: list[list[FillMaskPipelineResult]] = []
 
                 for i in range(outputs.logits.shape[0]):
                     masked_index = torch.nonzero(
@@ -204,7 +212,7 @@ class MetricComputer:
                         self.top_k
                     )
 
-                    result: list[dict[str, float | int | str]] = []
+                    result: list[FillMaskPipelineResult] = []
 
                     for probability, predicted_token in zip(
                         top_probabilities.tolist(), top_predicted_tokens.tolist()
