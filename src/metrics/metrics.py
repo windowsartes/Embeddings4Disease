@@ -1,6 +1,8 @@
+import numpy as np
+import torch
 from transformers import PreTrainedTokenizer, PreTrainedModel
 from torch.utils.data import DataLoader
-
+from tqdm import tqdm
 
 class MetricComputer:
     """
@@ -55,7 +57,7 @@ class MetricComputer:
             float: simpified DCG's value.
         """
         if answer in predicted_tokens:
-            return 1 / np.log2((predicted_tokens.index(answer) + 1) + 1)
+            return (1 / np.log2((predicted_tokens.index(answer) + 1) + 1)).astype(float)  # type: ignore 
 
         return 0.0
 
@@ -211,7 +213,7 @@ class MetricComputer:
                             {
                                 "score": probability,
                                 "token": predicted_token,
-                                "token_str": self.tokenizer.decode(predicted_token),
+                                "token_str": self.tokenizer.decode([predicted_token]),
                             }
                         )
 
@@ -250,21 +252,21 @@ class MetricComputer:
 
         metrics_value: dict[str, float] = {}
         if reciprocal_rank:
-            metrics_value["reciprocal_rank"] = np.mean(reciprocal_ranks)
+            metrics_value["reciprocal_rank"] = np.mean(reciprocal_ranks).astype(float)
 
         if simplified_dcg:
-            metrics_value["simplified_dcg"] = np.mean(simplified_dcgs)
+            metrics_value["simplified_dcg"] = np.mean(simplified_dcgs).astype(float)
 
         if precision:
-            metrics_value["precision"] = np.mean(precisions)
+            metrics_value["precision"] = np.mean(precisions).astype(float)
 
         if recall:
-            metrics_value["recall"] = np.mean(recalls)
+            metrics_value["recall"] = np.mean(recalls).astype(float)
 
         if f_score:
-            metrics_value["f_score"] = np.mean(f_scores)
+            metrics_value["f_score"] = np.mean(f_scores).astype(float)
 
         if hit:
-            metrics_value["hit"] = np.mean(hits)
+            metrics_value["hit"] = np.mean(hits).astype(float)
 
         return metrics_value
