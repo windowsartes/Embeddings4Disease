@@ -1,3 +1,9 @@
+import os
+import pathlib
+import pickle
+import random
+from filelock import FileLock
+
 import torch
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
@@ -12,7 +18,7 @@ class CustomLineByLineDataset(Dataset):
         path (str): path to data you want to use.
     """
 
-    def __init__(self, path: str):
+    def __init__(self, path: str | pathlib.Path):
         super().__init__()
 
         with open(path, "r") as input_file:
@@ -50,6 +56,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
     def __init__(
         self,
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        seq_len: int,
         file_path: str,
         block_size: int,
         overwrite_cache: bool = False,
@@ -61,6 +68,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
         if not os.path.isfile(file_path):
             raise ValueError(f"Input file path {file_path} not found")
 
+        self.seq_len: int = seq_len
         self.short_seq_probability: float = short_seq_probability
         self.nsp_probability: float = nsp_probability
 
@@ -92,10 +100,10 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not overwrite_cache:
                 with open(cached_features_file, "rb") as handle:
-                    self.examples = pickle.load(handle)
+                    self.examples: list[dict[str, torch.Tensor]] = pickle.load(handle)
 
             else:
-                self.documents = [[]]
+                self.documents: list[list[list[int]]] = [[]]
                 with open(file_path, encoding="utf-8") as f:
                     while True:
                         line: str = f.readline()
@@ -112,7 +120,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         if tokens:
                             self.documents[-1].append(tokens)
 
-                self.examples: list[dict[str, torch.Tensor]] = []
+                self.examples = []
                 for doc_index, document in enumerate(self.documents):
                     self.create_examples_from_document(document, doc_index, block_size)
 
@@ -121,7 +129,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
 
     def create_examples_from_document(
         self, document: list[list[int]], doc_index: int, block_size: int
-    ):
+    ) -> None:
         """Creates examples for a single document."""
 
         max_num_tokens: int = block_size - self.tokenizer.num_special_tokens_to_add(
@@ -179,7 +187,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                             if random_document_index != doc_index:
                                 break
 
-                        random_document: list[int] = self.documents[
+                        random_document: list[list[int]] = self.documents[
                             random_document_index
                         ]
                         random_start: int = random.randint(0, len(random_document) - 1)
@@ -193,7 +201,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         i -= num_unused_segments
                     # Actual next
                     else:
-                        is_random_next: bool = False
+                        is_random_next = False
                         for j in range(a_end, len(current_chunk)):
                             tokens_b.extend(current_chunk[j])
 
@@ -207,8 +215,8 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         )
 
                     # add special tokens
-                    tokens_a = list(dict.fromkeys(tokens_a))[:seq_len]
-                    tokens_b = list(dict.fromkeys(tokens_b))[:seq_len]
+                    tokens_a = list(dict.fromkeys(tokens_a))[:self.seq_len]
+                    tokens_b = list(dict.fromkeys(tokens_b))[:self.seq_len]
 
                     input_ids: list[int] = (
                         self.tokenizer.build_inputs_with_special_tokens(
