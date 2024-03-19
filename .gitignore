@@ -1,1 +1,12 @@
+build/
+
 src/*.egg-info
+src/*/__pycache__
+
+venv/
+
+.mypy_cache
+.ruff_cache
+
+data/
+storage/

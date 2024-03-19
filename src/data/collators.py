@@ -41,10 +41,10 @@ class MaskingCollator:
         for sequence in sequence_batch:
             sequence_splitted = sequence.split(" ")
 
-            sequence_splitted = sequence_splitted[:seq_len]
+            sequence_splitted = sequence_splitted[:self.seq_len]
 
             inputs_sequence.append(
-                " ".join(sequence_splitted[:-1] + [tokenizer.mask_token])
+                " ".join(sequence_splitted[:-1] + [self.tokenizer.mask_token])
             )
             answers.append(sequence_splitted[-1])
 

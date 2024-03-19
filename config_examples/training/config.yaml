@@ -1,36 +1,34 @@
 model:
- type: ConvBERT
+ type: BERT
  use_pretrained: false
+ path_to_saved_weights: null
  config:
   hidden_size: 384
-  num_attention_heads: 2
-  num_hidden_layers: 2
+  num_attention_heads: 1
+  num_hidden_layers: 1
 tokenizer:
  use_pretrained: true
+ path_to_saved_tokenizer: null
 hyperparameters:
  batch_size: 1024
  seq_len: 24
 storage_path: storage
 training:
- device: cpu
- path_to_data: data/train_transactions_single.txt
- checkpoint_dir: storage/checkpoint
- n_epochs: 100
+ device: cuda:0
+ path_to_data: data/val_transactions_single.txt
+ n_epochs: 2
  n_warmup_epochs: 30
+ n_checkpoints: 1
  optimizer_parameters:
-  learning_rate: 1e-4
+  learning_rate: 0.0001
   adam_beta1: 0.9
   adam_beta2: 0.999
   weight_decay: 0.01
 validation:
  path_to_data: data/val_transactions_single.txt
- metrics_dir: storage/metrics
- path_to_storage: storage
- period: 10
+ period: 1
  top_k: 10
  save_graphs: true
- show_graphs: true
- graphs_dir: storage/graphs
  metrics: 
   reciprocal_rank: true
   simplified_dcg: true
