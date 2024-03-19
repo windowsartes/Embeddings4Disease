@@ -57,9 +57,9 @@ class ArchitectureFactory(ABC):
         """
         pass
 
-    def create_storage(self):
+    def create_storage(self) -> None:
         """
-        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere. 
+        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
         """
         storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
         utils.create_dir(storage_path)
