@@ -17,6 +17,8 @@ from transformers import (
 )
 
 from callbacks import callbacks
+from data import collators, datasets
+from metrics import metrics
 from utils import utils
 
 
@@ -30,17 +32,15 @@ class ArchitectureFactory(ABC):
     Args:
         ABC (config (dict[str, tp.Any]): parsed config with all the required information.
     """
+
     def __init__(self, config: dict[str, tp.Any]):
 
         self.config: dict[str, tp.Any] = config
 
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-        utils.create_dir(storage_path)
-
     @abstractmethod
     def create_model(self) -> PreTrainedModel:
         """
-        This method can be used to create a proper model.        
+        This method can be used to create a proper model.
 
         Returns:
             PreTrainedModel: created model.
@@ -50,16 +50,25 @@ class ArchitectureFactory(ABC):
     @abstractmethod
     def create_tokenizer(self) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
         """
-        This method can be used to create a proper tokenizer.  
+        This method can be used to create a proper tokenizer.
 
         Returns:
             PreTrainedTokenizer | PreTrainedTokenizerFast: created tokenizer.
         """
         pass
 
+    def create_storage(self) -> None:
+        """
+        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
+        """
+        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
+        utils.create_dir(storage_path)
+
+        self.storage_path: pathlib.Path = storage_path
+
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
-        This method can be used to create a data collator which later will be using for training. 
+        This method can be used to create a data collator which later will be using for training.
 
         Returns:
             DataCollatorForLanguageModeling: created data collator.
@@ -125,7 +134,9 @@ class ArchitectureFactory(ABC):
 
         if compute_metrics:
             device: torch.device = torch.device(
-                self.config["training"]["device"] if torch.cuda.is_available() else "cpu"
+                self.config["training"]["device"]
+                if torch.cuda.is_available()
+                else "cpu"
             )
 
             used_callbacks.append(
@@ -200,6 +211,28 @@ class ArchitectureFactory(ABC):
 
         return training_args
 
+    def create_metric_computer(self) -> tuple[metrics.MetricComputer, dict[str, bool]]:
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
+            self.create_tokenizer()
+        )
+
+        dataset: torch.utils.data.Dataset = datasets.CustomLineByLineDataset(
+            working_dir.joinpath(self.config["validation"]["path_to_data"])
+        )
+        dataloader: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=self.config["hyperparameters"]["batch_size"],
+            collate_fn=collators.MaskingCollator(
+                tokenizer, self.config["hyperparameters"]["seq_len"]
+            ),
+        )
+
+        metric_computer: metrics.MetricComputer = metrics.MetricComputer(
+            tokenizer, self.config["validation"]["top_k"], dataloader
+        )
+
+        return (metric_computer, self.config["validation"]["metrics"])
+
     def set_warmup_epochs(
         self, training_args: TrainingArguments, dataset_train: LineByLineTextDataset
     ) -> None:
@@ -226,7 +259,7 @@ CLASS_REGISTER: dict[str, tp.Type[ArchitectureFactory]] = {}
 
 def architecture(cls: tp.Type[ArchitectureFactory]) -> tp.Type[ArchitectureFactory]:
     """
-    This decorator is used to register an architucture so Abstract Factory can create a proper model 
+    This decorator is used to register an architucture so Abstract Factory can create a proper model
     without any ifs inside its body.
 
     Args:

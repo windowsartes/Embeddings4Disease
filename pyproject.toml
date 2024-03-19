@@ -50,6 +50,7 @@ development = [
 
 [project.scripts]
 training = "cli.training:train"
+validation = "cli.validation:validation"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
