@@ -12,6 +12,7 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
+    Trainer,
     TrainerCallback,
     TrainingArguments,
 )
@@ -34,7 +35,6 @@ class ArchitectureFactory(ABC):
     """
 
     def __init__(self, config: dict[str, tp.Any]):
-
         self.config: dict[str, tp.Any] = config
 
     @abstractmethod
@@ -169,13 +169,6 @@ class ArchitectureFactory(ABC):
             )
         )
 
-        if self.config["save_trained_model"]:
-            used_callbacks.append(
-                callbacks.FinalCheckpointCallback(
-                    checkpoint_dir=storage_path.joinpath("final_checkpoint")
-                )
-            )
-
         return used_callbacks
 
     def create_training_args(self) -> TrainingArguments:
@@ -251,6 +244,15 @@ class ArchitectureFactory(ABC):
             ceil(len(dataset_train) / batch_size) * n_warmup_epochs
         )
 
+    def optionally_save(self, trainer: Trainer) -> None:
+        """
+        Saves model in the case this option was selected in the config file.
+
+        Args:
+            trainer (Trainer): Trainer that trained your model.
+        """
+        if self.config["save_trained_model"]:
+            trainer.save_model(self.storage_path.joinpath("saved_model"))
 
 # C = tp.TypeVar("C", bound=ArchitectureFactory)
 
@@ -301,10 +303,12 @@ class BERTFactory(ArchitectureFactory):
 
         if self.config["model"]["use_pretrained"]:
             if self.config["model"]["path_to_saved_weights"] is None:
+                print("load from huggingface")
                 model: transformers.BertForMaskedLM = (
                     transformers.BertForMaskedLM.from_pretrained("windowsartes/bert")
                 )
             else:
+                print("load locally saved model")
                 model = transformers.BertForMaskedLM.from_pretrained(
                     working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
                 )
