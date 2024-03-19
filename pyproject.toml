@@ -49,7 +49,7 @@ development = [
 ]
 
 [project.scripts]
-training = "cli.training:train"
+training = "cli.training:training"
 validation = "cli.validation:validation"
 
 [tool.ruff]
