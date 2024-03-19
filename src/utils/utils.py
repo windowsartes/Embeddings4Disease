@@ -8,7 +8,7 @@ def create_dir(path: str | pathlib.Path) -> None:
 
 def delete_files(path: str | pathlib.Path) -> None:
     for filename in os.listdir(str(path)):
-        file_path = path.joinpath(filename)
+        file_path = pathlib.Path(path).joinpath(filename)
 
         if os.path.isfile(file_path) or os.path.islink(file_path):
             os.unlink(file_path)

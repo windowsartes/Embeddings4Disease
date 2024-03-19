@@ -65,7 +65,7 @@ class MetricComputer:
             float: simpified DCG's value.
         """
         if answer in predicted_tokens:
-            return (1 / np.log2((predicted_tokens.index(answer) + 1) + 1)).astype(float)  # type: ignore 
+            return (1 / np.log2((predicted_tokens.index(answer) + 1) + 1)).astype(float)  # type: ignore
 
         return 0.0
 
