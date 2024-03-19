@@ -37,9 +37,6 @@ class ArchitectureFactory(ABC):
 
         self.config: dict[str, tp.Any] = config
 
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-        utils.create_dir(storage_path)
-
     @abstractmethod
     def create_model(self) -> PreTrainedModel:
         """
@@ -59,6 +56,15 @@ class ArchitectureFactory(ABC):
             PreTrainedTokenizer | PreTrainedTokenizerFast: created tokenizer.
         """
         pass
+
+    def create_storage(self):
+        """
+        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere. 
+        """
+        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
+        utils.create_dir(storage_path)
+
+        self.storage_path: pathlib.Path = storage_path
 
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
