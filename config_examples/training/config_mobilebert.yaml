@@ -16,8 +16,8 @@ storage_path: storage
 training:
  device: cuda:0
  path_to_data: data/tain_transactions_single.txt
- n_epochs: 1
- n_warmup_epochs: 30
+ n_epochs: 100
+ n_warmup_epochs: 50
  n_checkpoints: 1
  optimizer_parameters:
   learning_rate: 0.0006
