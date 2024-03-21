@@ -1,4 +1,4 @@
-# Config for validation
+# Config for training
 
 Здесь я опишу структуру конфигов, чтобы вы смогли настроить обучение так, как вам будет нужно.
 Для дольшинства моделей подойдёт файл config.yaml, но некоторые всё же отличаются своими параметрами, поэтому для части архитектур существуют собственные шаблоны.
@@ -9,7 +9,7 @@
 
 ## Config
 
-Стандартный шаблон, подойдёт для BERT/ConvBERT/DeBERTa/RoBERTa/RoFormer/XLMRoBERTa
+Стандартный шаблон - он подойдёт для BERT/ConvBERT/DeBERTa/RoBERTa/RoFormer/XLMRoBERTa
 
 Структура:
 
@@ -17,13 +17,13 @@
   - type: (str) - BERT/ConvBERT/DeBERTa/MobileBERT/RoBERTa/RoFormer/XLMRoBERTa.
   - use_pretrained: false/true - если true, то загружается предобученная модель, если false, то создаётся новая модель по секции config.
   - path_to_saved_weights: null/путь-до-модели - если null, то загружается модель с hugging face, иначе - из указанной          директории.
- - config - игнорируется, если use_pretrained == false.
-  - hidden_size: (uint) - размер эмбеддинга.
-  - num_attention_heads: (uint) - количество голов.
-  - num_hidden_layers: (uint) - количество энкодеров (encoder layer'ов).
+  - config - игнорируется, если use_pretrained == false.
+    - hidden_size: (uint) - размер эмбеддинга.
+    - num_attention_heads: (uint) - количество голов.
+    - num_hidden_layers: (uint) - количество энкодеров (encoder layer'ов).
 - tokenizer:
   - use_pretrained: false/true - использовать предобученный токенайзер или нет.
-  - path_to_saved_tokenizer: none/путь-до-токенайзера - игнорируется, если use_pretrained == true. Если none, то используется токенайзер с hugging face, иначе - тот, до которого указан путь.
+  - path_to_saved_tokenizer: null/путь-до-токенайзера - игнорируется, если use_pretrained == true. Если none, то используется токенайзер с hugging face, иначе - тот, до которого указан путь.
 - hyperparameters - гиперпараметры обучения.
   - batch_size: (uint) - размер батча.
   - seq_len: (uint) - макисмальный размер транзакции (не считая служебных токенов).
@@ -54,7 +54,6 @@
 - save_trained_model: false/true - нужно ли сохранять модель после обучения.
 
 У некоторых моделей архитектура отличается от BERT'a, поэтому их секция model будет отличатся, в остальном - всё то же самое.
-
 
 ### FNet
 
