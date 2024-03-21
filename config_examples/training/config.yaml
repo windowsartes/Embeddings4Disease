@@ -4,8 +4,8 @@ model:
  path_to_saved_weights: null
  config:
   hidden_size: 384
-  num_attention_heads: 1
-  num_hidden_layers: 1
+  num_attention_heads: 12
+  num_hidden_layers: 12
 tokenizer:
  use_pretrained: true
  path_to_saved_tokenizer: null
@@ -15,9 +15,9 @@ hyperparameters:
 storage_path: storage
 training:
  device: cuda:0
- path_to_data: data/val_transactions_single.txt
- n_epochs: 2
- n_warmup_epochs: 30
+ path_to_data: data/train_transactions_single.txt
+ n_epochs: 100
+ n_warmup_epochs: 50
  n_checkpoints: 1
  optimizer_parameters:
   learning_rate: 0.0001
