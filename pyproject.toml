@@ -24,6 +24,8 @@ keywords = ["TBA"]
 dependencies = [
   "accelerate>=0.21.0",
   "click",
+  "matplotlib",
+  "seaborn",
   "PyYAML >= 6.0.1",
   "torch",
   "transformers >= 4.38.2",
@@ -33,10 +35,6 @@ dependencies = [
 [project.optional-dependencies]
 roformer = [
   "rjieba"
-]
-visualization = [
-  "matplotlib",
-  "seaborn",
 ]
 
 development = [

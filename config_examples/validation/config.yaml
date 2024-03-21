@@ -18,4 +18,3 @@ validation:
   recall: true
   f_score: true
   hit: true
-save_trained_model: true
