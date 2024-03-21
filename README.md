@@ -46,10 +46,10 @@ TBA
 
 Где вместо «optional dependencies» перечислены через запятую названия наборов зависимостей. Их полный список вы можете найти в [pyptoject'е](./pyproject.toml).
 
-Например, чтобы получить возможно использовать RoFormer и делать визуализацию, нужно выполнить
+Например, чтобы получить возможно использовать RoFormer и использовать проверку типов, линтер и автоформатор, нужно выполнить
 
 ```bash
-!pip install "Embeddings4Disease[roformer,visualization] @ git+https://github.com/windowsartes/Embeddings4Disease.git
+!pip install "Embeddings4Disease[roformer,development] @ git+https://github.com/windowsartes/Embeddings4Disease.git
 ```
 
 Установив модуль в своё виртуальное окружение, вы сможете использовать его, как любой другой устанавливаемый пакет, а также использовать cli.
