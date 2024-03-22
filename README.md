@@ -13,6 +13,7 @@ TBA
   - [Использование](#использование)
     - [CLI для обучения](#cli-для-обучения)
     - [CLI для валидации](#cli-для-валидации)
+    - [CLI для предобработки](#cli-для-предобработки)
   - [Дополнительные примеры](#дополнительные-примеры)
   - [Тесты](#тесты)
 
@@ -21,13 +22,13 @@ TBA
 Чтобы установить пакет из этого репозитория, достаточно написать в терминале:
 
 ```bash
-!pip install git+https://github.com/windowsartesEmbeddings4Disease.git
+pip install git+https://github.com/windowsartesEmbeddings4Disease.git
 ```
 
 Если каких-то изменений ещё нет в master-ветке, то можно установить пакет из любой другой ветки при помощи:
 
 ```bash
-!pip install git+https://github.com/windowsartes/Embeddings4Disease.git@branch
+pip install git+https://github.com/windowsartes/Embeddings4Disease.git@branch
 ```
 
 Где «branch» - название нужной вам ветки.
@@ -35,13 +36,13 @@ TBA
 Например, чтобы установить версию пакеты из ветки «development», нужно выполнить 
 
 ```bash
-!pip install git+https://github.com/windowsartes/Embeddings4Disease.git@development
+pip install git+https://github.com/windowsartes/Embeddings4Disease.git@development
 ```
 
 Помимо этого, в нашем проекте есть опциональные зависимости, например, для визуализации или использования архитектуры RoFormer. Чтобы установить какие-то опциональные зависимости, выполните следующую команду:
 
 ```bash
-!pip install "Embeddings4Disease[optional dependencies] @ git+https://github.com/windowsartes/Embeddings4Disease.git
+pip install "Embeddings4Disease[optional dependencies] @ git+https://github.com/windowsartes/Embeddings4Disease.git
 ```
 
 Где вместо «optional dependencies» перечислены через запятую названия наборов зависимостей. Их полный список вы можете найти в [pyptoject'е](./pyproject.toml).
@@ -49,15 +50,15 @@ TBA
 Например, чтобы получить возможно использовать RoFormer и использовать проверку типов, линтер и автоформатор, нужно выполнить
 
 ```bash
-!pip install "Embeddings4Disease[roformer,development] @ git+https://github.com/windowsartes/Embeddings4Disease.git
+pip install "Embeddings4Disease[roformer,development] @ git+https://github.com/windowsartes/Embeddings4Disease.git
 ```
 
-Установив модуль в своё виртуальное окружение, вы сможете использовать его, как любой другой устанавливаемый пакет, а также использовать cli.
+Установив модуль в своё виртуальное окружение, вы сможете использовать его, как любой другой устанавливаемый пакет, а также использовать CLI.
 
 ## Использование
 
-В нашем проекте есть cli в рамках которого реализованы утилиты для обучения и валидации моделей.
-Скрипты будут сгенерированы и добавлены автоматически после установки пакеты в виртуальное окружение. Cli полностью работает на основе конфига, который вы ему подадите. Примеры различных конфигов вы можете найти [здесь](./config_examples/).
+В нашем проекте есть CLI в рамках которого реализованы утилиты для обучения и валидации моделей.
+Скрипты будут сгенерированы и добавлены автоматически после установки пакеты в виртуальное окружение. CLI полностью работает на основе конфига, который вы ему подадите. Примеры различных конфигов вы можете найти [здесь](./config_examples/).
 
 ### CLI для обучения
 
@@ -71,7 +72,7 @@ training *путь-до-конфига*
 
 ### CLI для валидации
 
-Также нами реализован cli для валидации моделей:
+Также нами реализован CLI для валидации моделей:
 
 ```bash
 validation *путь-до-конфига*
@@ -79,11 +80,21 @@ validation *путь-до-конфига*
 
 Как и при обучении, путь до конфиг-файла необходимо указывать относительно текущей директории. Примеры и описание вы можете найти [здесь](./config_examples/validation/)
 
+### CLI для предобработки
+
+CLI для обучения и для обучения ожидают, что данные будут в формате одной транзакции на одной строке. Чтобы привести данные к такому виду, а также иметь возможность создать токенайзер при помощи vocab-файла, у нас есть CLI для предобработки данных.
+
+```bash
+preprocessing *путь-до-конфига*
+```
+
+Детали создания конфига, а также пример для предобработки MIMIC-4 вы можете найти [здесь](./config_examples/preprocessing/).
+
 ## Дополнительные примеры
 
-В [этом colab-блокноте](https://colab.research.google.com/drive/1xc87kcnBKP5s_thYbfkAgiiIgiNhzBY7?usp=sharing) вы найдёте пример использования cli для обучения модели с нуля.
+В [этом colab-блокноте](https://colab.research.google.com/drive/1xc87kcnBKP5s_thYbfkAgiiIgiNhzBY7?usp=sharing) вы найдёте пример использования CLI для обучения модели с нуля.
 
-А в [этом colab-блокноте](https://colab.research.google.com/drive/1UPCCeCHfk88UQ6eW-i-VtZ5sH2jmL9Jc?usp=sharing) вы найдёте пример использования валидации через cli.
+А в [этом colab-блокноте](https://colab.research.google.com/drive/1UPCCeCHfk88UQ6eW-i-VtZ5sH2jmL9Jc?usp=sharing) вы найдёте пример использования валидации через CLI.
 
 ## Тесты
 

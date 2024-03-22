@@ -1,5 +1,3 @@
-import os
-import pathlib
 import warnings
 
 import click
@@ -9,8 +7,6 @@ from factories import abstract_factory
 
 
 warnings.filterwarnings("ignore")
-
-working_dir = pathlib.Path(os.getcwd())
 
 
 @click.command()
@@ -42,7 +38,6 @@ def training(config_path: str) -> None:
     trainer.train()
 
     factory.optionally_save(trainer)
-    #trainer.save_model(working_dir.joinpath("saved_model"))
 
 
 if __name__ == "__main__":

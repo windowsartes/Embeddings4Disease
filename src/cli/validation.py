@@ -1,11 +1,6 @@
-# import warnings
-
 import click
 
 from factories import abstract_factory
-
-
-# warnings.filterwarnings("ignore")
 
 
 @click.command()
