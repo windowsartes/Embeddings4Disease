@@ -5,10 +5,4 @@ code_length: 3
 code_lower_bound: "A"
 code_upper_bound: "N"
 epsilon: 0.333
-special_tokens:
-  unk_token: "[UNK]"
-  sep_token: "[SEP]"
-  pad_token: "[PAD]"
-  cls_token: "[CLS]"
-  mask_token: "[MASK]"
 random_seed: 3452

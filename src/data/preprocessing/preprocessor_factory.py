@@ -20,10 +20,39 @@ class PreprocessorFactory(ABC):
 
     @abstractmethod
     def train_val_split(self) -> None:
+        """
+        This method must make a train-validation split in special format: it must create 2 files
+        for trainin and 2 files for validation.
+        At the first file, transaction are written line-by-line. For example:
+
+        A11 A22 A33
+        B11 B22
+
+        At the second file, we create a seq2seq dataset. So the format must be: source transaction at one line,
+        target transaction at the next line, than blank line. For example:
+
+        A11, A22
+        A22, A33
+
+        B11, B22, B33
+        B22, B44, B55
+
+        Since we haven't done seq2seq yet, this format may change.
+        """
         pass
 
     @abstractmethod
     def create_vocab(self) -> None:
+        """
+        This method must create a vocab file: just a txt-file where all the tokens written line by line.
+        For example:
+
+        A11
+        A22
+        A33
+
+        Also you may or may not add special token at this file, cause they are explicitly specified in the constructor.
+        """
         pass
 
 
@@ -166,9 +195,6 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
             open(storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
             open(storage_dir.joinpath("train_transactions_single.txt"), "r") as train_single,
         ):
-            for special_token in self.config["special_tokens"].values():
-                vocab_file.write(special_token + "\n")
-
             for transaction in train_single:
                 tokens: list[str] = transaction.split()
 
