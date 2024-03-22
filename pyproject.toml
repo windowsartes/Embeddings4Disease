@@ -44,11 +44,13 @@ development = [
   "types-tqdm",
   "types-PyYAML",
   "types-seaborn",
+  "notebook",
 ]
 
 [project.scripts]
 training = "cli.training:training"
 validation = "cli.validation:validation"
+preprocessing = "cli.preprocessing:preprocessing"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
