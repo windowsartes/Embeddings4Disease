@@ -14,6 +14,11 @@ from transformers import (
     TrainerControl,
 )
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+try:
+    import wandb
+except ImportError:
+    pass
+
 
 from data.datasets import CustomLineByLineDataset
 from data.collators import MaskingCollator
@@ -56,6 +61,7 @@ class MetricComputerCallback(TrainerCallback):
         top_k: int = 10,
         batch_size: int = 1024,
         seq_len: int = 24,
+        use_wandb: bool = False,
     ):
         super().__init__()
 
@@ -67,6 +73,7 @@ class MetricComputerCallback(TrainerCallback):
         self.device: torch.device = device
 
         self.use_metrics: dict[str, bool] = use_metrics
+        self.use_wandb: bool = use_wandb
 
         for metric, usage in self.use_metrics.items():
             if usage:
@@ -159,6 +166,9 @@ class MetricComputerCallback(TrainerCallback):
                     logs[state.epoch] = metrics[metric]
 
                     self.__dump_logs(metric, logs)
+
+            if self.use_wandb:
+                wandb.log({f"eval/{metric}": metrics[metric] for metric, usage in self.use_metrics.items() if usage})
 
         return control
 
