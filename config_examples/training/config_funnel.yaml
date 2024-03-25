@@ -9,13 +9,15 @@ model:
 tokenizer:
  use_pretrained: true
  path_to_saved_tokenizer: null
+ path_to_vocab_file: data/vocab.txt
 hyperparameters:
  batch_size: 1024
+ seq_len: 24
 storage_path: storage
 training:
  device: cuda:0
  path_to_data: data/train_transactions_single.txt
- n_epochs: 100
+ n_epochs: 2
  n_warmup_epochs: 50
  n_checkpoints: 1
  optimizer_parameters:
