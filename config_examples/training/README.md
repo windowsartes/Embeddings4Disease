@@ -53,7 +53,7 @@
     - f_score: false/true
     - hit: false/true
 - save_trained_model: false/true - нужно ли сохранять модель после обучения.
-- wandb:
+- wandb - параметры интеграции с weights and biases. Для использования требуется опциональная зависимость "wandb".
   - use: false/true - логгировать метрики и loss на weights and biases или нет.
   - project: (str) - название проекта.
   - api_key: (str) - ваш api-ключ от wandb.
