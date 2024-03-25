@@ -1,5 +1,6 @@
 import os
 import pathlib
+import shutil
 import typing as tp
 from abc import ABC, abstractmethod
 from math import ceil
@@ -254,6 +255,7 @@ class ArchitectureFactory(ABC):
         if self.config["save_trained_model"]:
             trainer.save_model(self.storage_path.joinpath("saved_model"))
 
+
 # C = tp.TypeVar("C", bound=ArchitectureFactory)
 
 CLASS_REGISTER: dict[str, tp.Type[ArchitectureFactory]] = {}
@@ -294,7 +296,17 @@ class BERTFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            tokenizer = transformers.BertTokenizer(
+                vocab_file=working_dir.joinpath(
+                    self.config["tokenizer"]["path_to_vocab_file"]
+                ),
+                do_lower_case=False,
+                unk_token="[UNK]",
+                sep_token="[SEP]",
+                pad_token="[PAD]",
+                cls_token="[CLS]",
+                mask_token="[MASK]",
+            )
 
         return tokenizer
 
@@ -344,7 +356,17 @@ class ConvBERTFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            tokenizer = transformers.ConvBertTokenizer(
+                vocab_file=working_dir.joinpath(
+                    self.config["tokenizer"]["path_to_vocab_file"]
+                ),
+                do_lower_case=False,
+                unk_token="[UNK]",
+                sep_token="[SEP]",
+                pad_token="[PAD]",
+                cls_token="[CLS]",
+                mask_token="[MASK]",
+            )
 
         return tokenizer
 
@@ -394,7 +416,25 @@ class DeBERTaFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            bert_tokenizer: transformers.BertTokenizerFast = (
+                transformers.BertTokenizerFast(
+                    vocab_file=working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_vocab_file"]
+                    ),
+                    do_lower_case=False,
+                    unk_token="[UNK]",
+                    sep_token="[SEP]",
+                    pad_token="[PAD]",
+                    cls_token="[CLS]",
+                    mask_token="[MASK]",
+                )
+            )
+            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+
+            tokenizer = transformers.DebertaTokenizerFast.from_pretrained(
+                working_dir.joinpath("_temp")
+            )
+            shutil.rmtree(working_dir.joinpath("_temp"))
 
         return tokenizer
 
@@ -444,7 +484,25 @@ class FNetFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            bert_tokenizer: transformers.BertTokenizerFast = (
+                transformers.BertTokenizerFast(
+                    vocab_file=working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_vocab_file"]
+                    ),
+                    do_lower_case=False,
+                    unk_token="[UNK]",
+                    sep_token="[SEP]",
+                    pad_token="[PAD]",
+                    cls_token="[CLS]",
+                    mask_token="[MASK]",
+                )
+            )
+            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+
+            tokenizer = transformers.FNetTokenizerFast.from_pretrained(
+                working_dir.joinpath("_temp")
+            )
+            shutil.rmtree(working_dir.joinpath("_temp"))
 
         return tokenizer
 
@@ -492,7 +550,18 @@ class FunnelTransformerFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            tokenizer = transformers.FunnelTokenizer(
+                vocab_file=working_dir.joinpath(
+                    self.config["tokenizer"]["path_to_vocab_file"]
+                ),
+                do_lower_case=False,
+                do_basic_tokenize=True,
+                unk_token="[UNK]",
+                sep_token="[SEP]",
+                pad_token="[PAD]",
+                cls_token="[CLS]",
+                mask_token="[MASK]",
+            )
 
         return tokenizer
 
@@ -540,7 +609,18 @@ class MobileBERTFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            tokenizer = transformers.MobileBertTokenizer(
+                vocab_file=working_dir.joinpath(
+                    self.config["tokenizer"]["path_to_vocab_file"]
+                ),
+                do_lower_case=False,
+                do_basic_tokenize=True,
+                unk_token="[UNK]",
+                sep_token="[SEP]",
+                pad_token="[PAD]",
+                cls_token="[CLS]",
+                mask_token="[MASK]",
+            )
 
         return tokenizer
 
@@ -590,7 +670,25 @@ class RoBERTaFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            bert_tokenizer: transformers.BertTokenizerFast = (
+                transformers.BertTokenizerFast(
+                    vocab_file=working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_vocab_file"]
+                    ),
+                    do_lower_case=False,
+                    unk_token="[UNK]",
+                    sep_token="[SEP]",
+                    pad_token="[PAD]",
+                    cls_token="[CLS]",
+                    mask_token="[MASK]",
+                )
+            )
+            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+
+            tokenizer = transformers.RobertaTokenizerFast.from_pretrained(
+                working_dir.joinpath("_temp")
+            )
+            shutil.rmtree(working_dir.joinpath("_temp"))
 
         return tokenizer
 
@@ -640,7 +738,17 @@ class RoFormerFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            tokenizer = transformers.RoFormerTokenizer(
+                vocab_file=working_dir.joinpath(
+                    self.config["tokenizer"]["path_to_vocab_file"]
+                ),
+                do_lower_case=False,
+                unk_token="[UNK]",
+                sep_token="[SEP]",
+                pad_token="[PAD]",
+                cls_token="[CLS]",
+                mask_token="[MASK]",
+            )
 
         return tokenizer
 
@@ -690,7 +798,25 @@ class XLMRoBERTaFactory(ArchitectureFactory):
                     )
                 )
         else:
-            raise NotImplementedError
+            bert_tokenizer: transformers.BertTokenizerFast = (
+                transformers.BertTokenizerFast(
+                    vocab_file=working_dir.joinpath(
+                        self.config["tokenizer"]["path_to_vocab_file"]
+                    ),
+                    do_lower_case=False,
+                    unk_token="[UNK]",
+                    sep_token="[SEP]",
+                    pad_token="[PAD]",
+                    cls_token="[CLS]",
+                    mask_token="[MASK]",
+                )
+            )
+            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+
+            tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(
+                working_dir.joinpath("_temp")
+            )
+            shutil.rmtree(working_dir.joinpath("_temp"))
 
         return tokenizer
 
