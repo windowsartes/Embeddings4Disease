@@ -7,8 +7,9 @@ model:
   num_attention_heads: 12
   num_hidden_layers: 12
 tokenizer:
- use_pretrained: true
+ use_pretrained: false
  path_to_saved_tokenizer: null
+ path_to_vocab_file: data/vocab.txt
 hyperparameters:
  batch_size: 1024
  seq_len: 24

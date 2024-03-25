@@ -23,7 +23,8 @@
     - num_hidden_layers: (uint) - количество энкодеров (encoder layer'ов).
 - tokenizer:
   - use_pretrained: false/true - использовать предобученный токенайзер или нет.
-  - path_to_saved_tokenizer: null/путь-до-токенайзера - игнорируется, если use_pretrained == true. Если none, то используется токенайзер с hugging face, иначе - тот, до которого указан путь.
+  - path_to_saved_tokenizer: null/путь-до-токенайзера - игнорируется, если use_pretrained == false. Если none, то используется токенайзер с hugging face, иначе - тот, до которого указан путь.
+  - path_to_vocab_file: путь-до-vocab-txt - игнорируется, если use_pretrained == true. Путь до vocab.txt файла, в котором перечислены токены.
 - hyperparameters - гиперпараметры обучения.
   - batch_size: (uint) - размер батча.
   - seq_len: (uint) - макисмальный размер транзакции (не считая служебных токенов).
