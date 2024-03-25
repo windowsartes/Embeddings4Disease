@@ -38,3 +38,7 @@ validation:
   f_score: true
   hit: true
 save_trained_model: true
+wandb:
+ use: true
+ project: funnel-transformer
+ api_key: your-api-key
