@@ -53,6 +53,10 @@
     - f_score: false/true
     - hit: false/true
 - save_trained_model: false/true - нужно ли сохранять модель после обучения.
+- wandb:
+  - use: false/true - логгировать метрики и loss на weights and biases или нет.
+  - project: (str) - название проекта.
+  - api_key: (str) - ваш api-ключ от wandb.
 
 У некоторых моделей архитектура отличается от BERT'a, поэтому их секция model будет отличатся, в остальном - всё то же самое.
 

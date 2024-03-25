@@ -37,6 +37,10 @@ roformer = [
   "rjieba"
 ]
 
+wandb = [
+  "wandb"
+]
+
 development = [
   "black",
   "mypy",

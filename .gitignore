@@ -12,3 +12,4 @@ venv/
 /data
 notebooks/
 storage/
+wandb/

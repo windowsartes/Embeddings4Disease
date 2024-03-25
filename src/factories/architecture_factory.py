@@ -17,6 +17,10 @@ from transformers import (
     TrainerCallback,
     TrainingArguments,
 )
+try:
+    import wandb
+except ImportError:
+    pass
 
 from callbacks import callbacks
 from data import collators, datasets
@@ -37,6 +41,10 @@ class ArchitectureFactory(ABC):
 
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
+
+        if config["wandb"]["use"]:
+            wandb.login(key=config["wandb"]["api_key"])
+            wandb.init(project=config["wandb"]["project"])
 
     @abstractmethod
     def create_model(self) -> PreTrainedModel:
@@ -153,6 +161,7 @@ class ArchitectureFactory(ABC):
                     top_k=self.config["validation"]["top_k"],
                     batch_size=self.config["hyperparameters"]["batch_size"],
                     seq_len=self.config["hyperparameters"]["seq_len"],
+                    use_wandb=self.config["wandb"]["use"],
                 ),
             )
 
@@ -199,7 +208,7 @@ class ArchitectureFactory(ABC):
             prediction_loss_only=True,
             lr_scheduler_type="cosine",
             max_grad_norm=1.0,
-            report_to="none",
+            report_to="wandb" if self.config["wandb"]["use"] else "none",
             **self.config["training"]["optimizer_parameters"],
         )
 
