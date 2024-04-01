@@ -1,6 +1,6 @@
 import click
 
-from embeddings4disease.data.preprocessing import abstract_factory
+from embeddings4disease.preprocessing import abstract_factory
 
 
 @click.command()
