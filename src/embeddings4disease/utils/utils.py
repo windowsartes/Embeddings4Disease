@@ -32,7 +32,7 @@ class CustomOrderedSet:
     def __contains__(self, value: tp.Any) -> bool:
         return value in self.storage
 
-    def __iter__(self) -> tp.Self:
+    def __iter__(self):  # type: ignore
         self.current_index: int = 0
 
         return self
