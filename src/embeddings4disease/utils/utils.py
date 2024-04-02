@@ -1,6 +1,7 @@
 import importlib.resources
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import typing as tp
@@ -79,6 +80,10 @@ def get_project_root() -> pathlib.Path:
     return path
 
 def get_cwd() -> pathlib.Path:
-    result = subprocess.run("cd", text=True, stdout=subprocess.PIPE, shell=True)
 
+    if platform.system() == "Windows":
+        result = subprocess.run("cd", text=True, stdout=subprocess.PIPE, shell=True)
+        return result.stdout.strip()
+    
+    result = subprocess.run("pwd", text=True, stdout=subprocess.PIPE, shell=True)
     return result.stdout.strip()
