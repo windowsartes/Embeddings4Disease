@@ -22,10 +22,10 @@ try:
 except ImportError:
     pass
 
-from callbacks import callbacks
-from data import collators, datasets
-from metrics import metrics
-from utils import utils
+from embeddings4disease.callbacks import callbacks
+from embeddings4disease.data import collators, datasets
+from embeddings4disease.metrics import metrics
+from embeddings4disease.utils import utils
 
 
 working_dir = pathlib.Path(os.getcwd())

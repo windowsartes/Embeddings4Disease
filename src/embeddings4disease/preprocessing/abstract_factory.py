@@ -3,7 +3,7 @@ import pathlib
 import typing as tp
 import yaml
 
-from data.preprocessing import preprocessor_factory
+from embeddings4disease.preprocessing import preprocessor_factory
 
 
 working_dir: pathlib.Path = pathlib.Path(os.getcwd())

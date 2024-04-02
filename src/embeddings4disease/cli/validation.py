@@ -1,6 +1,6 @@
 import click
 
-from factories import abstract_factory
+from embeddings4disease.factories import abstract_factory
 
 
 @click.command()

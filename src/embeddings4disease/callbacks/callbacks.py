@@ -20,10 +20,10 @@ except ImportError:
     pass
 
 
-from data.datasets import CustomLineByLineDataset
-from data.collators import MaskingCollator
-from metrics.metrics import MetricComputer
-from utils import utils
+from embeddings4disease.data.datasets import CustomLineByLineDataset
+from embeddings4disease.data.collators import MaskingCollator
+from embeddings4disease.metrics.metrics import MetricComputer
+from embeddings4disease.utils import utils
 
 
 class MetricComputerCallback(TrainerCallback):

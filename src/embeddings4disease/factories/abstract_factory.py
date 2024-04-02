@@ -3,7 +3,7 @@ import pathlib
 import typing as tp
 import yaml
 
-from factories import architecture_factory
+from embeddings4disease.factories import architecture_factory
 
 
 working_dir: pathlib.Path = pathlib.Path(os.getcwd())

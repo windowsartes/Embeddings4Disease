@@ -52,9 +52,9 @@ development = [
 ]
 
 [project.scripts]
-training = "cli.training:training"
-validation = "cli.validation:validation"
-preprocessing = "cli.preprocessing:preprocessing"
+training = "embeddings4disease.cli.training:training"
+validation = "embeddings4disease.cli.validation:validation"
+preprocessing = "embeddings4disease.cli.preprocessing:preprocessing"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

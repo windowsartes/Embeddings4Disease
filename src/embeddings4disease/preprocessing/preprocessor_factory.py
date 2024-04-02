@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from utils import utils
+from embeddings4disease.utils import utils
 
 
 working_dir: pathlib.Path = pathlib.Path(os.getcwd())

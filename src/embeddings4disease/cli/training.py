@@ -3,7 +3,7 @@ import warnings
 import click
 import transformers
 
-from factories import abstract_factory
+from embeddings4disease.factories import abstract_factory
 
 
 warnings.filterwarnings("ignore")
