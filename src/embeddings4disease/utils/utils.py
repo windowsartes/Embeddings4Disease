@@ -76,4 +76,9 @@ def get_project_root() -> pathlib.Path:
     with importlib.resources.path("embeddings4disease", "__init__.py") as src_path:
         path = src_path.parents[2]
     return path
+
+def get_cwd() -> pathlib.Path:
+    result = subprocess.run(["pwd"], text=True, stdout=subprocess.PIPE)
+
+    return result.stdout.strip()
     
