@@ -2,6 +2,7 @@ import os
 import pathlib
 import shutil
 import typing as tp
+import warnings
 from abc import ABC, abstractmethod
 from math import ceil
 
@@ -20,7 +21,10 @@ from transformers import (
 try:
     import wandb
 except ImportError:
-    pass
+    warnings.warn("wandb isn't installed so it won't be used.")
+    wandb_installed: bool = False
+else:
+    wandb_installed = True
 
 from embeddings4disease.callbacks import callbacks
 from embeddings4disease.data import collators, datasets
@@ -42,7 +46,7 @@ class ArchitectureFactory(ABC):
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
 
-        if config["wandb"]["use"]:
+        if wandb_installed and config["wandb"]["use"]:
             wandb.login(key=config["wandb"]["api_key"])
             wandb.init(project=config["wandb"]["project"])
 
@@ -161,7 +165,7 @@ class ArchitectureFactory(ABC):
                     top_k=self.config["validation"]["top_k"],
                     batch_size=self.config["hyperparameters"]["batch_size"],
                     seq_len=self.config["hyperparameters"]["seq_len"],
-                    use_wandb=self.config["wandb"]["use"],
+                    use_wandb=wandb_installed and self.config["wandb"]["use"],
                 ),
             )
 
@@ -208,7 +212,7 @@ class ArchitectureFactory(ABC):
             prediction_loss_only=True,
             lr_scheduler_type="cosine",
             max_grad_norm=1.0,
-            report_to="wandb" if self.config["wandb"]["use"] else "none",
+            report_to="wandb" if (wandb_installed and self.config["wandb"]["use"]) else "none",
             **self.config["training"]["optimizer_parameters"],
         )
 
