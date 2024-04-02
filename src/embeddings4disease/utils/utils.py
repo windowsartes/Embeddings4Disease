@@ -2,6 +2,7 @@ import importlib.resources
 import os
 import pathlib
 import shutil
+import subprocess
 import typing as tp
 
 
@@ -81,4 +82,3 @@ def get_cwd() -> pathlib.Path:
     result = subprocess.run(["pwd"], text=True, stdout=subprocess.PIPE)
 
     return result.stdout.strip()
-    
