@@ -79,6 +79,6 @@ def get_project_root() -> pathlib.Path:
     return path
 
 def get_cwd() -> pathlib.Path:
-    result = subprocess.run(["pwd"], text=True, stdout=subprocess.PIPE)
+    result = subprocess.run("cd", text=True, stdout=subprocess.PIPE, shell=True)
 
     return result.stdout.strip()
