@@ -1,6 +1,7 @@
 import json
 import glob
 import pathlib
+import warnings
 
 import seaborn as sns
 import torch
@@ -255,41 +256,6 @@ class SaveGraphsCallback(TrainerCallback):
 
             plt.savefig(self.graph_storage_dir.joinpath(f"{metric_name}.png"))
 
-        history = state.log_history
-
-        loss_train_history = [record["loss"] for record in history if "loss" in record]
-        loss_val_history = [
-            record["eval_loss"] for record in history if "eval_loss" in record
-        ]
-        epoch_history = [int(record["epoch"]) for record in history if "loss" in record]
-
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-
-        ax.yaxis.set_minor_locator(AutoMinorLocator())
-
-        ax.tick_params(which="major", length=7)
-        ax.tick_params(which="minor", length=4, color="r")
-
-        ax.grid(which="minor", alpha=0.2)
-        ax.grid(which="major", alpha=0.5)
-
-        ax.plot(epoch_history, loss_train_history, label="Обучение")
-        ax.plot(epoch_history, loss_val_history, label="Валидация")
-
-        plt.legend()
-
-        plt.xticks(rotation=45)
-
-        plt.title("Изменение loss-функции за время обучения")
-        plt.xlabel("Количество эпох")
-
-        plt.legend()
-
-        plt.savefig(self.graph_storage_dir.joinpath("loss.png"))
-
-        return control
-
 
 class SaveLossHistoryCallback(TrainerCallback):
     """
@@ -299,11 +265,13 @@ class SaveLossHistoryCallback(TrainerCallback):
         loss_storage_dir (str | pathlib.Path): directory where you want to store loss history.
     """
 
-    def __init__(self, loss_storage_dir: str | pathlib.Path):
+    def __init__(self, loss_storage_dir: str | pathlib.Path, save_plot: bool):
         super().__init__()
 
         self.loss_storage_dir: pathlib.Path = pathlib.Path(loss_storage_dir)
         utils.create_dir(loss_storage_dir)
+
+        self.save_plot: bool = save_plot
 
     def on_evaluate(  # type: ignore
         self,
@@ -327,5 +295,34 @@ class SaveLossHistoryCallback(TrainerCallback):
 
         with open(self.loss_storage_dir.joinpath("loss_history.json"), "w") as f:
             json.dump(history, f)
+
+        if self.save_plot:
+            loss_train_history = [record["loss"] for record in history if "loss" in record]
+            loss_val_history = [
+                record["eval_loss"] for record in history if "eval_loss" in record
+            ]
+            epoch_history = [int(record["epoch"]) for record in history if "loss" in record]
+
+            fig = plt.figure()
+            ax = fig.add_subplot(1, 1, 1)
+
+            ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+            ax.tick_params(which="major", length=7)
+            ax.tick_params(which="minor", length=4, color="r")
+
+            ax.grid(which="minor", alpha=0.2)
+            ax.grid(which="major", alpha=0.5)
+
+            ax.plot(epoch_history, loss_train_history, label="Обучение")
+            ax.plot(epoch_history, loss_val_history, label="Валидация")
+
+            plt.xticks(rotation=45)
+
+            plt.title("Изменение loss-функции за время обучения")
+            plt.xlabel("Количество эпох")
+            plt.legend()
+
+            plt.savefig(self.loss_storage_dir.joinpath("loss.png"))
 
         return control
