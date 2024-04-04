@@ -19,7 +19,7 @@ from transformers import (
     TrainingArguments,
 )
 try:
-    import wandb
+    import wandb  # type: ignore
 except ImportError:
     warnings.warn("wandb isn't installed so it won't be used.")
     wandb_installed: bool = False
@@ -166,20 +166,13 @@ class ArchitectureFactory(ABC):
                     batch_size=self.config["hyperparameters"]["batch_size"],
                     seq_len=self.config["hyperparameters"]["seq_len"],
                     use_wandb=wandb_installed and self.config["wandb"]["use"],
+                    save_plot=self.config["validation"]["save_graphs"],
                 ),
-            )
-
-        if self.config["validation"]["save_graphs"]:
-            used_callbacks.append(
-                callbacks.SaveGraphsCallback(
-                    graph_storage_dir=storage_path.joinpath("graphs"),
-                    metrics_storage_dir=storage_path.joinpath("metrics"),
-                )
             )
 
         used_callbacks.append(
             callbacks.SaveLossHistoryCallback(
-                loss_storage_dir=storage_path.joinpath("loss"),
+                loss_storage_dir=storage_path.joinpath("loss"), save_plot=self.config["validation"]["save_graphs"]
             )
         )
 
