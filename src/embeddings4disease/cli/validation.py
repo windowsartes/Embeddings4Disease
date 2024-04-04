@@ -5,7 +5,7 @@ from embeddings4disease.factories import abstract_factory
 
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
-def validation(config_path: str) -> None:
+def validate(config_path: str) -> None:
     factory = abstract_factory.AbstractFactory().create(config_path)
     model = factory.create_model()
 
@@ -15,4 +15,4 @@ def validation(config_path: str) -> None:
 
 
 if __name__ == "__main__":
-    validation()
+    validate()
