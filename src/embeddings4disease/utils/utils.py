@@ -79,11 +79,10 @@ def get_project_root() -> pathlib.Path:
         path = src_path.parents[2]
     return path
 
-def get_cwd() -> pathlib.Path:
-
+def get_cwd() -> str:
     if platform.system() == "Windows":
         result = subprocess.run("cd", text=True, stdout=subprocess.PIPE, shell=True)
         return result.stdout.strip()
-    
+
     result = subprocess.run("pwd", text=True, stdout=subprocess.PIPE, shell=True)
     return result.stdout.strip()
