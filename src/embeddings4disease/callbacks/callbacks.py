@@ -16,7 +16,7 @@ from transformers import (
 )
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 try:
-    import wandb
+    import wandb  # type: ignore
 except ImportError:
     warnings.warn("wandb isn't installed so it won't be used.")
     wandb_installed: bool = False
@@ -65,6 +65,7 @@ class MetricComputerCallback(TrainerCallback):
         batch_size: int = 1024,
         seq_len: int = 24,
         use_wandb: bool = False,
+        save_plot: bool = True,
     ):
         super().__init__()
 
@@ -77,6 +78,7 @@ class MetricComputerCallback(TrainerCallback):
 
         self.use_metrics: dict[str, bool] = use_metrics
         self.use_wandb: bool = use_wandb
+        self.save_plot: bool = save_plot
 
         for metric, usage in self.use_metrics.items():
             if usage:
@@ -111,8 +113,11 @@ class MetricComputerCallback(TrainerCallback):
             metric_name (str): metric's name.
             logs (dict[int, float]): metric's logs.
         """
+        utils.create_dir(pathlib.Path(self.metrics_storage_dir).joinpath(
+            pathlib.Path(metric_name)))
+
         file_name: pathlib.Path = pathlib.Path(self.metrics_storage_dir).joinpath(
-            f"{metric_name}.json"
+            pathlib.Path(metric_name).joinpath(f"{metric_name}.json")
         )
 
         with open(file_name, "w") as file:
@@ -129,7 +134,7 @@ class MetricComputerCallback(TrainerCallback):
             dict[str, float]: metric's logs.
         """
         file_name: pathlib.Path = pathlib.Path(self.metrics_storage_dir).joinpath(
-            f"{metric_name}.json"
+            pathlib.Path(metric_name).joinpath(f"{metric_name}.json")
         )
 
         with open(file_name, "r") as file:
@@ -163,15 +168,43 @@ class MetricComputerCallback(TrainerCallback):
 
             kwargs["model"].to(self.device)
 
-            for metric, usage in self.use_metrics.items():
+            for metric_name, usage in self.use_metrics.items():
                 if usage:
-                    logs = self.__load_logs(metric)
-                    logs[state.epoch] = metrics[metric]
+                    logs = self.__load_logs(metric_name)
+                    logs[state.epoch] = metrics[metric_name]
 
-                    self.__dump_logs(metric, logs)
+                    self.__dump_logs(metric_name, logs)
+
+                    if self.save_plot:
+                        x_ticks: list[int] = [
+                            int(float(value)) for value in list(logs.keys())
+                        ]
+                        values: list[float] = list(logs.values())
+
+                        fig = plt.figure()
+                        ax = fig.add_subplot(1, 1, 1)
+
+                        ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+                        ax.tick_params(which="major", length=7)
+                        ax.tick_params(which="minor", length=4, color="r")
+
+                        ax.grid(which="minor", alpha=0.2)
+                        ax.grid(which="major", alpha=0.5)
+
+                        plt.xticks(rotation=45)
+
+                        ax.plot(x_ticks, values)
+
+                        plt.title(f"Значения {metric_name} на валидации")
+                        plt.xlabel("Эпоха")
+
+                        plt.savefig(self.metrics_storage_dir.joinpath(
+                            pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
+                        ))
 
             if wandb_installed and self.use_wandb:
-                wandb.log({f"eval/{metric}": metrics[metric] for metric, usage in self.use_metrics.items() if usage})
+                wandb.log({f"eval/{metric_name}": metrics[metric_name] for metric_name, usage in self.use_metrics.items() if usage})
 
         return control
 
