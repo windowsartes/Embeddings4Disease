@@ -17,8 +17,10 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 try:
     import wandb
 except ImportError:
-    pass
-
+    warnings.warn("wandb isn't installed so it won't be used.")
+    wandb_installed: bool = False
+else:
+    wandb_installed = True
 
 from embeddings4disease.data.datasets import CustomLineByLineDataset
 from embeddings4disease.data.collators import MaskingCollator
@@ -167,7 +169,7 @@ class MetricComputerCallback(TrainerCallback):
 
                     self.__dump_logs(metric, logs)
 
-            if self.use_wandb:
+            if wandb_installed and self.use_wandb:
                 wandb.log({f"eval/{metric}": metrics[metric] for metric, usage in self.use_metrics.items() if usage})
 
         return control
