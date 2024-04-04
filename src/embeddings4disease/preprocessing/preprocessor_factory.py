@@ -19,7 +19,7 @@ class PreprocessorFactory(ABC):
         self.config: dict[str, tp.Any] = config
 
     @abstractmethod
-    def train_val_split(self) -> None:
+    def make_train_val_split(self) -> None:
         """
         This method must make a train-validation split in special format: it must create 2 files
         for trainin and 2 files for validation.
@@ -73,7 +73,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         random.seed(random_seed)
         np.random.seed(random_seed)
 
-    def train_val_split(self) -> None:
+    def make_train_val_split(self) -> None:
         diagnoses: pd.DataFrame = pd.read_csv(
             working_dir.joinpath(self.config["data_dir"]).joinpath("diagnoses_icd.csv")
         )
