@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore")
 
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
-def training(config_path: str) -> None:
+def train(config_path: str) -> None:
     factory = abstract_factory.AbstractFactory().create(config_path)
     factory.create_storage()
 
@@ -41,4 +41,4 @@ def training(config_path: str) -> None:
 
 
 if __name__ == "__main__":
-    training()
+    train()
