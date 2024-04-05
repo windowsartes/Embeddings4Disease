@@ -18,6 +18,7 @@ from transformers import (
     TrainerCallback,
     TrainingArguments,
 )
+
 try:
     import wandb  # type: ignore
 except ImportError:
@@ -30,9 +31,6 @@ from embeddings4disease.callbacks import callbacks
 from embeddings4disease.data import collators, datasets
 from embeddings4disease.metrics import metrics
 from embeddings4disease.utils import utils
-
-
-working_dir = pathlib.Path(os.getcwd())
 
 
 class ArchitectureFactory(ABC):
@@ -74,10 +72,10 @@ class ArchitectureFactory(ABC):
         """
         This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
         """
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
+        storage_path: pathlib.Path = os.path.abspath(self.config["storage_path"])
         utils.create_dir(storage_path)
 
-        self.storage_path: pathlib.Path = storage_path
+        self.storage_path: pathlib.Path = pathlib.Path(storage_path)
 
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
@@ -118,7 +116,7 @@ class ArchitectureFactory(ABC):
 
         dataset: LineByLineTextDataset = LineByLineTextDataset(
             tokenizer=tokenizer,
-            file_path=working_dir.joinpath(self.config[mode]["path_to_data"]),
+            file_path=os.path.abspath(self.config[mode]["path_to_data"]),
             block_size=self.config["hyperparameters"]["seq_len"] + 2,
         )
 
@@ -134,9 +132,6 @@ class ArchitectureFactory(ABC):
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
             self.create_tokenizer()
         )
-
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
         used_callbacks: list[transformers.TrainerCallback] = []
 
         compute_metrics: bool = False
@@ -154,10 +149,10 @@ class ArchitectureFactory(ABC):
 
             used_callbacks.append(
                 callbacks.MetricComputerCallback(
-                    path_to_data=working_dir.joinpath(
+                    path_to_data=os.path.abspath(
                         self.config["validation"]["path_to_data"]
                     ),
-                    metrics_storage_dir=storage_path.joinpath("metrics"),
+                    metrics_storage_dir=self.storage_path.joinpath("metrics"),
                     tokenizer=tokenizer,
                     use_metrics=self.config["validation"]["metrics"],
                     device=device,
@@ -172,7 +167,8 @@ class ArchitectureFactory(ABC):
 
         used_callbacks.append(
             callbacks.SaveLossHistoryCallback(
-                loss_storage_dir=storage_path.joinpath("loss"), save_plot=self.config["validation"]["save_graphs"]
+                loss_storage_dir=self.storage_path.joinpath("loss"),
+                save_plot=self.config["validation"]["save_graphs"],
             )
         )
 
@@ -185,9 +181,7 @@ class ArchitectureFactory(ABC):
         Returns:
             TrainingArguments: training arg which will be later used by trainer.
         """
-        storage_path: pathlib.Path = working_dir.joinpath(self.config["storage_path"])
-
-        checkpoint_path: pathlib.Path = storage_path.joinpath("checkpoint")
+        checkpoint_path: pathlib.Path = self.storage_path.joinpath("checkpoint")
 
         utils.create_dir(checkpoint_path)
         utils.delete_files(checkpoint_path)
@@ -205,7 +199,9 @@ class ArchitectureFactory(ABC):
             prediction_loss_only=True,
             lr_scheduler_type="cosine",
             max_grad_norm=1.0,
-            report_to="wandb" if (wandb_installed and self.config["wandb"]["use"]) else "none",
+            report_to=(
+                "wandb" if (wandb_installed and self.config["wandb"]["use"]) else "none"
+            ),
             **self.config["training"]["optimizer_parameters"],
         )
 
@@ -217,7 +213,7 @@ class ArchitectureFactory(ABC):
         )
 
         dataset: torch.utils.data.Dataset = datasets.CustomLineByLineDataset(
-            working_dir.joinpath(self.config["validation"]["path_to_data"])
+            os.path.abspath(self.config["validation"]["path_to_data"])
         )
         dataloader: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
             dataset,
@@ -262,8 +258,6 @@ class ArchitectureFactory(ABC):
             trainer.save_model(self.storage_path.joinpath("saved_model"))
 
 
-# C = tp.TypeVar("C", bound=ArchitectureFactory)
-
 CLASS_REGISTER: dict[str, tp.Type[ArchitectureFactory]] = {}
 
 
@@ -297,13 +291,11 @@ class BERTFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.BertTokenizer.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.BertTokenizer(
-                vocab_file=working_dir.joinpath(
+                vocab_file=os.path.abspath(
                     self.config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
@@ -321,14 +313,12 @@ class BERTFactory(ArchitectureFactory):
 
         if self.config["model"]["use_pretrained"]:
             if self.config["model"]["path_to_saved_weights"] is None:
-                print("load from huggingface")
                 model: transformers.BertForMaskedLM = (
                     transformers.BertForMaskedLM.from_pretrained("windowsartes/bert")
                 )
             else:
-                print("load locally saved model")
                 model = transformers.BertForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -357,13 +347,11 @@ class ConvBERTFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.ConvBertTokenizer.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.ConvBertTokenizer(
-                vocab_file=working_dir.joinpath(
+                vocab_file=os.path.abspath(
                     self.config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
@@ -388,7 +376,7 @@ class ConvBERTFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.ConvBertForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -417,14 +405,12 @@ class DeBERTaFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.DebertaTokenizerFast.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
-                    vocab_file=working_dir.joinpath(
+                    vocab_file=os.path.abspath(
                         self.config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
@@ -435,12 +421,11 @@ class DeBERTaFactory(ArchitectureFactory):
                     mask_token="[MASK]",
                 )
             )
-            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
-            tokenizer = transformers.DebertaTokenizerFast.from_pretrained(
-                working_dir.joinpath("_temp")
-            )
-            shutil.rmtree(working_dir.joinpath("_temp"))
+            bert_tokenizer.save_pretrained(temp_dir)
+            tokenizer = transformers.DebertaTokenizerFast.from_pretrained(temp_dir)
+            shutil.rmtree(temp_dir)
 
         return tokenizer
 
@@ -456,7 +441,7 @@ class DeBERTaFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.DebertaForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -485,14 +470,12 @@ class FNetFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.FNetTokenizerFast.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
-                    vocab_file=working_dir.joinpath(
+                    vocab_file=os.path.abspath(
                         self.config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
@@ -503,12 +486,11 @@ class FNetFactory(ArchitectureFactory):
                     mask_token="[MASK]",
                 )
             )
-            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
-            tokenizer = transformers.FNetTokenizerFast.from_pretrained(
-                working_dir.joinpath("_temp")
-            )
-            shutil.rmtree(working_dir.joinpath("_temp"))
+            bert_tokenizer.save_pretrained(temp_dir)
+            tokenizer = transformers.FNetTokenizerFast.from_pretrained(temp_dir)
+            shutil.rmtree(temp_dir)
 
         return tokenizer
 
@@ -522,7 +504,7 @@ class FNetFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.FNetForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -551,13 +533,11 @@ class FunnelTransformerFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.FunnelTokenizer.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.FunnelTokenizer(
-                vocab_file=working_dir.joinpath(
+                vocab_file=os.path.abspath(
                     self.config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
@@ -583,7 +563,7 @@ class FunnelTransformerFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.FunnelForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             config: transformers.FunnelConfig = transformers.FunnelConfig(
@@ -610,13 +590,11 @@ class MobileBERTFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.MobileBertTokenizer.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.MobileBertTokenizer(
-                vocab_file=working_dir.joinpath(
+                vocab_file=os.path.abspath(
                     self.config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
@@ -642,7 +620,7 @@ class MobileBERTFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.MobileBertForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -671,14 +649,12 @@ class RoBERTaFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.RobertaTokenizerFast.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
-                    vocab_file=working_dir.joinpath(
+                    vocab_file=os.path.abspath(
                         self.config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
@@ -689,12 +665,11 @@ class RoBERTaFactory(ArchitectureFactory):
                     mask_token="[MASK]",
                 )
             )
-            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
-            tokenizer = transformers.RobertaTokenizerFast.from_pretrained(
-                working_dir.joinpath("_temp")
-            )
-            shutil.rmtree(working_dir.joinpath("_temp"))
+            bert_tokenizer.save_pretrained(temp_dir)
+            tokenizer = transformers.RobertaTokenizerFast.from_pretrained(temp_dir)
+            shutil.rmtree(temp_dir)
 
         return tokenizer
 
@@ -710,7 +685,7 @@ class RoBERTaFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.RobertaForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -739,13 +714,11 @@ class RoFormerFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.RoFormerTokenizer.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.RoFormerTokenizer(
-                vocab_file=working_dir.joinpath(
+                vocab_file=os.path.abspath(
                     self.config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
@@ -770,7 +743,7 @@ class RoFormerFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.RoFormerForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
@@ -799,14 +772,12 @@ class XLMRoBERTaFactory(ArchitectureFactory):
                 )
             else:
                 tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(
-                    working_dir.joinpath(
-                        self.config["tokenizer"]["path_to_saved_tokenizer"]
-                    )
+                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
-                    vocab_file=working_dir.joinpath(
+                    vocab_file=os.path.abspath(
                         self.config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
@@ -817,12 +788,11 @@ class XLMRoBERTaFactory(ArchitectureFactory):
                     mask_token="[MASK]",
                 )
             )
-            bert_tokenizer.save_pretrained(working_dir.joinpath("_temp"))
+            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
-            tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(
-                working_dir.joinpath("_temp")
-            )
-            shutil.rmtree(working_dir.joinpath("_temp"))
+            bert_tokenizer.save_pretrained(temp_dir)
+            tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(temp_dir)
+            shutil.rmtree(temp_dir)
 
         return tokenizer
 
@@ -838,7 +808,7 @@ class XLMRoBERTaFactory(ArchitectureFactory):
                 )
             else:
                 model = transformers.XLMRobertaForMaskedLM.from_pretrained(
-                    working_dir.joinpath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
                 )
         else:
             seq_len: int = self.config["hyperparameters"]["seq_len"]
