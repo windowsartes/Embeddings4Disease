@@ -4,6 +4,7 @@ import shutil
 import typing as tp
 import warnings
 from abc import ABC, abstractmethod
+from datetime import datetime
 from math import ceil
 
 import torch
@@ -44,10 +45,6 @@ class ArchitectureFactory(ABC):
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
 
-        if wandb_installed and config["wandb"]["use"]:
-            wandb.login(key=config["wandb"]["api_key"])
-            wandb.init(project=config["wandb"]["project"])
-
     @abstractmethod
     def create_model(self) -> PreTrainedModel:
         """
@@ -68,14 +65,34 @@ class ArchitectureFactory(ABC):
         """
         pass
 
-    def create_storage(self) -> None:
+    def initialize(self) -> None:
+        """
+        This method is used if we need to initialize some features in the case of training.
+        """
+        self._create_storage()
+        self._log_into_wandb()
+
+    def _create_storage(self) -> None:
         """
         This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
         """
-        storage_path: pathlib.Path = os.path.abspath(self.config["storage_path"])
+        working_dir: pathlib.Path = pathlib.Path(utils.get_cwd())
+
+        now = datetime.now() 
+        data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
+
+        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
         utils.create_dir(storage_path)
 
-        self.storage_path: pathlib.Path = pathlib.Path(storage_path)
+        self.storage_path: pathlib.Path = storage_path
+
+    def _log_into_wandb(self) -> None:
+        """
+        This method is used to log into wandb.
+        """
+        if wandb_installed and config["wandb"]["use"]:
+            wandb.login(key=config["wandb"]["api_key"])
+            wandb.init(project=config["wandb"]["project"])
 
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
