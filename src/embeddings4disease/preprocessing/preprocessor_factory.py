@@ -11,9 +11,6 @@ from tqdm import tqdm
 from embeddings4disease.utils import utils
 
 
-working_dir: pathlib.Path = pathlib.Path(os.getcwd())
-
-
 class PreprocessorFactory(ABC):
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
@@ -73,9 +70,14 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         random.seed(random_seed)
         np.random.seed(random_seed)
 
+        storage_dir: pathlib.Path = pathlib.Path(os.path.abspath(self.config["storage_dir"]))
+        utils.create_dir(storage_dir)
+
+        self.storage_dir: pathlib.Path = storage_dir
+
     def make_train_val_split(self) -> None:
         diagnoses: pd.DataFrame = pd.read_csv(
-            working_dir.joinpath(self.config["data_dir"]).joinpath("diagnoses_icd.csv")
+            pathlib.Path(os.path.abspath(self.config["data_dir"])).joinpath("diagnoses_icd.csv")
         )
         diagnoses = diagnoses[diagnoses.icd_version == 10]
         diagnoses = self._preprocess_column(
@@ -91,14 +93,11 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         first_write_train: bool = True
         first_write_val: bool = True
 
-        storage_dir: pathlib.Path = working_dir.joinpath(self.config["storage_dir"])
-        utils.create_dir(storage_dir)
-
         with (
-            open(storage_dir.joinpath("train_transactions_single.txt"), "w") as train_single,
-            open(storage_dir.joinpath("train_transactions_pair.txt"), "w") as train_pair,
-            open(storage_dir.joinpath("val_transactions_single.txt"), "w") as val_single,
-            open(storage_dir.joinpath("val_transactions_pair.txt"), "w") as val_pair,
+            open(self.storage_dir.joinpath("train_transactions_single.txt"), "w") as train_single,
+            open(self.storage_dir.joinpath("train_transactions_pair.txt"), "w") as train_pair,
+            open(self.storage_dir.joinpath("val_transactions_single.txt"), "w") as val_single,
+            open(self.storage_dir.joinpath("val_transactions_pair.txt"), "w") as val_pair,
         ):
             for subject_index in tqdm(range(len(subject_ids))):
                 subject_transactions: pd.DataFrame = diagnoses[
@@ -187,13 +186,11 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                                 train_pair.write(" ".join(unique_tokens) + "\n")
 
     def create_vocab(self) -> None:
-        storage_dir: pathlib.Path = working_dir.joinpath(self.config["storage_dir"])
-
         vocab: set[str] = set()
 
         with (
-            open(storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
-            open(storage_dir.joinpath("train_transactions_single.txt"), "r") as train_single,
+            open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
+            open(self.storage_dir.joinpath("train_transactions_single.txt"), "r") as train_single,
         ):
             for transaction in train_single:
                 tokens: list[str] = transaction.split()
