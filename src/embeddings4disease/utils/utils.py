@@ -1,6 +1,9 @@
+import importlib.resources
 import os
 import pathlib
+import platform
 import shutil
+import subprocess
 import typing as tp
 
 
@@ -70,3 +73,16 @@ def delete_files(path: str | pathlib.Path) -> None:
             os.unlink(file_path)
         elif os.path.isdir(file_path):
             shutil.rmtree(file_path)
+
+def get_project_root() -> pathlib.Path:
+    with importlib.resources.path("embeddings4disease", "__init__.py") as src_path:
+        path = src_path.parents[2]
+    return path
+
+def get_cwd() -> str:
+    if platform.system() == "Windows":
+        result = subprocess.run("cd", text=True, stdout=subprocess.PIPE, shell=True)
+        return result.stdout.strip()
+
+    result = subprocess.run("pwd", text=True, stdout=subprocess.PIPE, shell=True)
+    return result.stdout.strip()
