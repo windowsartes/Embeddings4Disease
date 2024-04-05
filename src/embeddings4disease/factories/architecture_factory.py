@@ -4,6 +4,7 @@ import shutil
 import typing as tp
 import warnings
 from abc import ABC, abstractmethod
+from datetime import datetime
 from math import ceil
 
 import torch
@@ -72,10 +73,18 @@ class ArchitectureFactory(ABC):
         """
         This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
         """
-        storage_path: pathlib.Path = os.path.abspath(self.config["storage_path"])
+        # storage_path: pathlib.Path = os.path.abspath(self.config["storage_path"])
+        #utils.create_dir(storage_path)
+
+        working_dir: pathlib.Path = pathlib.Path(utils.get_cwd())
+
+        now = datetime.now() 
+        data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
+
+        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
         utils.create_dir(storage_path)
 
-        self.storage_path: pathlib.Path = pathlib.Path(storage_path)
+        self.storage_path: pathlib.Path = storage_path
 
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
