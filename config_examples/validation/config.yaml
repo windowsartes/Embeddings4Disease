@@ -18,5 +18,3 @@ validation:
   recall: true
   f_score: true
   hit: true
-wandb:
- use: false
