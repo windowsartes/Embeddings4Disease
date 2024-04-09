@@ -1,6 +1,8 @@
+import typing as tp
+from collections import defaultdict
+
 import numpy as np
 import torch
-import typing as tp
 from transformers import PreTrainedTokenizer, PreTrainedModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -12,7 +14,14 @@ class FillMaskPipelineResult(tp.TypedDict):
     token_str: str
 
 
-class MetricComputer:
+METRIC_REGISTER = {}
+
+def metric(function: tp.Callable[[str, list[str]], float]) -> tp.Callable[[str, list[str]], float]:
+    METRIC_REGISTER[function.__name__[10:]] = function
+    return function
+
+
+class MLMMetricComputer:
     """
     Basic class for evalution model's performance.
     In the initializer you need to pass following argimnets:
@@ -35,6 +44,7 @@ class MetricComputer:
         self.top_k: int = top_k
         self.dataloader: DataLoader = dataloader
 
+    @metric
     @staticmethod
     def __compute_reciprocal_rank(answer: str, predicted_tokens: list[str]) -> float:
         """
@@ -52,6 +62,7 @@ class MetricComputer:
 
         return 0.0
 
+    @metric
     @staticmethod
     def __compute_simplified_dcg(answer: str, predicted_tokens: list[str]) -> float:
         """
@@ -69,6 +80,7 @@ class MetricComputer:
 
         return 0.0
 
+    @metric
     @staticmethod
     def __compute_precision(answer: str, predicted_tokens: list[str]) -> float:
         """
@@ -86,7 +98,8 @@ class MetricComputer:
         TP_and_FP: int = len(predicted_tokens)
 
         return TP / TP_and_FP
-
+    
+    @metric
     @staticmethod
     def __compute_recall(answer: str, predicted_tokens: list[str]) -> float:
         """
@@ -111,21 +124,28 @@ class MetricComputer:
 
         return TP / TP_and_FN
 
+    @metric
     @staticmethod
-    def __compute_f_score(precision: float, recall: float) -> float:
+    def __compute_f_score(answer: str, predicted_tokens: list[str], beta: float = 1.) -> float:
         """
-        Computes F_1 score from given precision and recall.
+        TBA
 
         Args:
-            precision (float): precision's value on some example.
-            recall (float): recall's value on the same example.
+            answer (str): _description_
+            predicted_tokens (list[str]): _description_
+            beta (falot, optional): _description_. Defaults to 1..
 
         Returns:
-            float: F_1 score.
+            float: _description_
         """
         eps = 1e-9
-        return (2 * precision * recall) / (precision + recall + eps)
 
+        precision = self.__compute_precision(answer, predicted_tokens)
+        recall = self.__compute_recall(answer, predicted_tokens)
+
+        return ((1 + beta**2) * precision * recall) / ((beta**2) * precision + recall + eps)
+
+    @metric
     @staticmethod
     def __compute_hits(answer: str, predicted_tokens: list[str]) -> int:
         """
@@ -143,12 +163,13 @@ class MetricComputer:
     def get_metrics_value(
         self,
         model: PreTrainedModel,
-        reciprocal_rank: bool = False,
-        simplified_dcg: bool = False,
-        precision: bool = False,
-        recall: bool = False,
-        f_score: bool = False,
-        hit: bool = False,
+        #reciprocal_rank: bool = False,
+        #simplified_dcg: bool = False,
+        #precision: bool = False,
+        #recall: bool = False,
+        #f_score: bool = False,
+        #hit: bool = False,
+        metrics_to_use: dict[str, float],
     ) -> dict[str, float]:
         """
         Using this method you can evaluate your model. It will compute metric's value on all the data from
@@ -174,7 +195,12 @@ class MetricComputer:
         Returns:
             dict[str, float]: a dictionary with metric's average metrics values over dataloader's data
         """
-
+        metrics_storage: dict[list[float]] = defaultdict(list)
+        for metric, usage in metrics_to_use.items():
+            if usage:
+                metrics_storage[metric] = []
+    
+        """
         if reciprocal_rank:
             reciprocal_ranks: list[float] = []
 
@@ -191,7 +217,8 @@ class MetricComputer:
             f_scores: list[float] = []
 
         if hit:
-            hits: list[float] = []
+            hits: list[float] = []  
+        """
 
         with torch.no_grad():
             for batch_inputs, batch_answers in tqdm(self.dataloader):
@@ -231,7 +258,8 @@ class MetricComputer:
                     predicted_tokens = [
                         prediction["token_str"] for prediction in model_predictions
                     ]
-
+                    
+                    """
                     if reciprocal_rank:
                         reciprocal_ranks.append(
                             self.__compute_reciprocal_rank(answer, predicted_tokens)
@@ -252,11 +280,12 @@ class MetricComputer:
 
                     if f_score:
                         f_scores.append(
-                            self.__compute_f_score(precisions[-1], recalls[-1])
+                            self.__compute_f_score(answer, predicted_tokens)
                         )
 
                     if hit:
                         hits.append(self.__compute_hits(answer, predicted_tokens))
+                    """
 
         metrics_value: dict[str, float] = {}
         if reciprocal_rank:
@@ -278,3 +307,6 @@ class MetricComputer:
             metrics_value["hit"] = np.mean(hits).astype(float)
 
         return metrics_value
+
+
+print(METRIC_REGISTER)
