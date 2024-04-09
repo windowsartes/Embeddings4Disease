@@ -6,7 +6,7 @@ import transformers
 from embeddings4disease.factories import abstract_factory
 
 
-warnings.filterwarnings("ignore")
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 @click.command()

@@ -18,7 +18,7 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 try:
     import wandb  # type: ignore
 except ImportError:
-    warnings.warn("wandb isn't installed so it won't be used.")
+    warnings.warn(ImportWarning("wandb isn't installed so it won't be used."))
     wandb_installed: bool = False
 else:
     wandb_installed = True
