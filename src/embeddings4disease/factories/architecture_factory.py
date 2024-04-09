@@ -165,7 +165,7 @@ class ArchitectureFactory(ABC):
             )
 
             used_callbacks.append(
-                callbacks.MetricComputerCallback(
+                callbacks.MLMMetricComputerCallback(
                     path_to_data=os.path.abspath(
                         self.config["validation"]["path_to_data"]
                     ),
@@ -224,7 +224,7 @@ class ArchitectureFactory(ABC):
 
         return training_args
 
-    def create_metric_computer(self) -> tuple[metrics.MetricComputer, dict[str, bool]]:
+    def create_metric_computer(self) -> tuple[metrics.MLMMetricComputer, dict[str, bool]]:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
             self.create_tokenizer()
         )
@@ -240,7 +240,7 @@ class ArchitectureFactory(ABC):
             ),
         )
 
-        metric_computer: metrics.MetricComputer = metrics.MetricComputer(
+        metric_computer: metrics.MLMMetricComputer = metrics.MLMMetricComputer(
             tokenizer, self.config["validation"]["top_k"], dataloader
         )
 

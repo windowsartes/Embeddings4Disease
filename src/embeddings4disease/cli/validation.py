@@ -11,7 +11,7 @@ def validate(config_path: str) -> None:
 
     metric_computer, used_metrics = factory.create_metric_computer()
 
-    print(metric_computer.get_metrics_value(model, **used_metrics))
+    print(metric_computer.get_metrics_value(model, used_metrics))
 
 
 if __name__ == "__main__":
