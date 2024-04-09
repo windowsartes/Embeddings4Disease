@@ -1,5 +1,5 @@
 import typing as tp
-from collections import defaultdict
+import warnings
 
 import numpy as np
 import torch
@@ -16,7 +16,7 @@ class FillMaskPipelineResult(tp.TypedDict):
 
 METRIC_REGISTER = {}
 
-def metric(function: tp.Callable[[str, list[str]], float]) -> tp.Callable[[str, list[str]], float]:
+def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Callable[[str, list[str], list[float]], float]:
     METRIC_REGISTER[function.__name__[10:]] = function
     return function
 
@@ -46,7 +46,7 @@ class MLMMetricComputer:
 
     @metric
     @staticmethod
-    def __compute_reciprocal_rank(answer: str, predicted_tokens: list[str]) -> float:
+    def __compute_reciprocal_rank(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes reciprocal rank over one example.
 
@@ -58,13 +58,13 @@ class MLMMetricComputer:
             float: reciprocal rank's value.
         """
         if answer in predicted_tokens:
-            return 1 / (predicted_tokens.index(answer) + 1)
+            return 1. / (predicted_tokens.index(answer) + 1)
 
         return 0.0
 
     @metric
     @staticmethod
-    def __compute_simplified_dcg(answer: str, predicted_tokens: list[str]) -> float:
+    def __compute_simplified_dcg(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes simpified DCG over one example.
 
@@ -76,13 +76,13 @@ class MLMMetricComputer:
             float: simpified DCG's value.
         """
         if answer in predicted_tokens:
-            return (1 / np.log2((predicted_tokens.index(answer) + 1) + 1)).astype(float)  # type: ignore
+            return (1. / np.log2((predicted_tokens.index(answer) + 1) + 1)).astype(float)  # type: ignore
 
         return 0.0
 
     @metric
     @staticmethod
-    def __compute_precision(answer: str, predicted_tokens: list[str]) -> float:
+    def __compute_precision(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes precision over one example.
 
@@ -98,10 +98,10 @@ class MLMMetricComputer:
         TP_and_FP: int = len(predicted_tokens)
 
         return TP / TP_and_FP
-    
+
     @metric
     @staticmethod
-    def __compute_recall(answer: str, predicted_tokens: list[str]) -> float:
+    def __compute_recall(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes recall over one example.
 
@@ -126,7 +126,7 @@ class MLMMetricComputer:
 
     @metric
     @staticmethod
-    def __compute_f_score(answer: str, predicted_tokens: list[str], beta: float = 1.) -> float:
+    def __compute_f_score(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float], beta: float = 1.) -> float:
         """
         TBA
 
@@ -140,14 +140,23 @@ class MLMMetricComputer:
         """
         eps = 1e-9
 
-        precision = self.__compute_precision(answer, predicted_tokens)
-        recall = self.__compute_recall(answer, predicted_tokens)
+        precision = MLMMetricComputer.__compute_precision(answer, predicted_tokens, tokens_probabilities)
+        recall = MLMMetricComputer.__compute_recall(answer, predicted_tokens, tokens_probabilities)
 
         return ((1 + beta**2) * precision * recall) / ((beta**2) * precision + recall + eps)
 
     @metric
     @staticmethod
-    def __compute_hits(answer: str, predicted_tokens: list[str]) -> int:
+    def __compute_confidence(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+        for token, probability in zip(predicted_tokens, tokens_probabilities):
+            if token == answer:
+                return probability
+
+        return 0.
+
+    @metric
+    @staticmethod
+    def __compute_hits(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> int:
         """
         Computes HITS value on one example;
 
@@ -163,12 +172,6 @@ class MLMMetricComputer:
     def get_metrics_value(
         self,
         model: PreTrainedModel,
-        #reciprocal_rank: bool = False,
-        #simplified_dcg: bool = False,
-        #precision: bool = False,
-        #recall: bool = False,
-        #f_score: bool = False,
-        #hit: bool = False,
         metrics_to_use: dict[str, float],
     ) -> dict[str, float]:
         """
@@ -195,30 +198,16 @@ class MLMMetricComputer:
         Returns:
             dict[str, float]: a dictionary with metric's average metrics values over dataloader's data
         """
-        metrics_storage: dict[list[float]] = defaultdict(list)
+        metrics_storage: dict[str, list[float]] = {}
         for metric, usage in metrics_to_use.items():
             if usage:
-                metrics_storage[metric] = []
-    
-        """
-        if reciprocal_rank:
-            reciprocal_ranks: list[float] = []
-
-        if simplified_dcg:
-            simplified_dcgs: list[float] = []
-
-        if precision:
-            precisions: list[float] = []
-
-        if recall:
-            recalls: list[float] = []
-
-        if f_score:
-            f_scores: list[float] = []
-
-        if hit:
-            hits: list[float] = []  
-        """
+                if metric not in METRIC_REGISTER:
+                    warnings.warn(
+                        f"There is no {metric} in the supported metrics so this key will be ignored",
+                        SyntaxWarning
+                    )
+                else:
+                    metrics_storage[metric] = []
 
         with torch.no_grad():
             for batch_inputs, batch_answers in tqdm(self.dataloader):
@@ -258,55 +247,16 @@ class MLMMetricComputer:
                     predicted_tokens = [
                         prediction["token_str"] for prediction in model_predictions
                     ]
-                    
-                    """
-                    if reciprocal_rank:
-                        reciprocal_ranks.append(
-                            self.__compute_reciprocal_rank(answer, predicted_tokens)
-                        )
+                    tokens_probabilities = [
+                        prediction["score"] for prediction in model_predictions
+                    ]
 
-                    if simplified_dcg:
-                        simplified_dcgs.append(
-                            self.__compute_simplified_dcg(answer, predicted_tokens)
-                        )
-
-                    if precision:
-                        precisions.append(
-                            self.__compute_precision(answer, predicted_tokens)
-                        )
-
-                    if recall:
-                        recalls.append(self.__compute_recall(answer, predicted_tokens))
-
-                    if f_score:
-                        f_scores.append(
-                            self.__compute_f_score(answer, predicted_tokens)
-                        )
-
-                    if hit:
-                        hits.append(self.__compute_hits(answer, predicted_tokens))
-                    """
+                    for metric in metrics_storage:
+                        metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
 
         metrics_value: dict[str, float] = {}
-        if reciprocal_rank:
-            metrics_value["reciprocal_rank"] = np.mean(reciprocal_ranks).astype(float)
 
-        if simplified_dcg:
-            metrics_value["simplified_dcg"] = np.mean(simplified_dcgs).astype(float)
-
-        if precision:
-            metrics_value["precision"] = np.mean(precisions).astype(float)
-
-        if recall:
-            metrics_value["recall"] = np.mean(recalls).astype(float)
-
-        if f_score:
-            metrics_value["f_score"] = np.mean(f_scores).astype(float)
-
-        if hit:
-            metrics_value["hit"] = np.mean(hits).astype(float)
+        for metric in metrics_storage:
+            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
 
         return metrics_value
-
-
-print(METRIC_REGISTER)

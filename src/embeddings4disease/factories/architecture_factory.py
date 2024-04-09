@@ -23,7 +23,7 @@ from transformers import (
 try:
     import wandb  # type: ignore
 except ImportError:
-    warnings.warn("wandb isn't installed so it won't be used.")
+    warnings.warn(ImportWarning("wandb isn't installed so it won't be used."))
     wandb_installed: bool = False
 else:
     wandb_installed = True
@@ -165,7 +165,7 @@ class ArchitectureFactory(ABC):
             )
 
             used_callbacks.append(
-                callbacks.MLMMetricComputerCallback(
+                callbacks.MetricComputerCallback(
                     path_to_data=os.path.abspath(
                         self.config["validation"]["path_to_data"]
                     ),
