@@ -70,7 +70,9 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         random.seed(random_seed)
         np.random.seed(random_seed)
 
-        storage_dir: pathlib.Path = pathlib.Path(os.path.abspath(self.config["storage_dir"]))
+        storage_dir: pathlib.Path = pathlib.Path(
+            os.path.abspath(self.config["storage_dir"])
+        )
         utils.create_dir(storage_dir)
 
         self.storage_dir: pathlib.Path = storage_dir
@@ -89,9 +91,6 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         )
 
         subject_ids: list[int] = list(set(diagnoses["subject_id"]))
-
-        first_write_train: bool = True
-        first_write_val: bool = True
 
         with (
             open(self.storage_dir.joinpath("train_transactions_single.txt"), "w") as train_single,
@@ -131,10 +130,12 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                             next_unique_tokens = self._get_unique_tokens(
                                 subject_transactions, hadm_id_subset[hadm_id_index + 1]
                             )
-                            train_pair.write(" ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n")
+                            train_pair.write(
+                                " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
+                            )
 
                     if to_validation:
-                         # отправляем последние 2 транзакции в валидацию
+                        # отправляем последние 2 транзакции в валидацию
                         hadm_id_subset = hadm_ids[-2:]
                         for hadm_id_index in range(len(hadm_id_subset)):
                             unique_tokens = self._get_unique_tokens(
@@ -144,9 +145,12 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
                             if hadm_id_index < len(hadm_id_subset) - 1:
                                 next_unique_tokens = self._get_unique_tokens(
-                                    subject_transactions, hadm_id_subset[hadm_id_index + 1]
+                                    subject_transactions,
+                                    hadm_id_subset[hadm_id_index + 1],
                                 )
-                                val_pair.write(" ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n")
+                                val_pair.write(
+                                    " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
+                                )
                     else:
                         # отправляем последние 2 транзакции в обучение
                         hadm_id_subset = hadm_ids[-2:]
@@ -158,10 +162,12 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
                             if hadm_id_index < len(hadm_id_subset) - 1:
                                 next_unique_tokens = self._get_unique_tokens(
-                                    subject_transactions, hadm_id_subset[hadm_id_index + 1]
+                                    subject_transactions,
+                                    hadm_id_subset[hadm_id_index + 1],
                                 )
-                                train_pair.write(" ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n")
-                                
+                                train_pair.write(
+                                    " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
+                                )
 
     def create_vocab(self) -> None:
         vocab: set[str] = set()
@@ -184,6 +190,165 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
     ) -> list[str]:
         transaction: pd.DataFrame = subject_transactions[
             subject_transactions["hadm_id"] == hadm_id
+        ]
+        tokens: list[str] = list(transaction["icd_code"])
+
+        custom_ordered_set: utils.CustomOrderedSet = utils.CustomOrderedSet()
+        for current_token in tokens:
+            custom_ordered_set.add(current_token)
+
+        return [token for token in custom_ordered_set]
+
+    @staticmethod
+    def _preprocess_column(
+        data: pd.DataFrame,
+        target_column: str,
+        code_length: int,
+        lower_bound: str,
+        upper_bound: str,
+    ) -> pd.DataFrame:
+        code_cutter: utils.CodeCutter = utils.CodeCutter(code_length)
+
+        data[target_column] = pd.Series(data[target_column], dtype="string")
+        data[target_column] = data[target_column].apply(code_cutter)
+
+        data_filtered: pd.DataFrame = data[
+            (lower_bound <= data["icd_code"]) & (data["icd_code"] <= upper_bound)
+        ]
+
+        return data_filtered
+
+
+@preprocessor
+class SecretDatasetPreprocessorFactory(PreprocessorFactory):
+    def __init__(self, config: dict[str, tp.Any]):
+        super().__init__(config)
+
+        random_seed: int = self.config["random_seed"]
+        random.seed(random_seed)
+        np.random.seed(random_seed)
+
+        storage_dir: pathlib.Path = pathlib.Path(
+            os.path.abspath(self.config["storage_dir"])
+        )
+        utils.create_dir(storage_dir)
+
+        self.storage_dir: pathlib.Path = storage_dir
+
+    def make_train_val_split(self) -> None:
+        diagnoses: pd.DataFrame = pd.read_csv(
+            pathlib.Path(os.path.abspath(self.config["data"]))
+        )
+
+        diagnoses = self._preprocess_column(
+            diagnoses,
+            "icd_code",
+            self.config["code_length"],
+            self.config["code_lower_bound"],
+            self.config["code_upper_bound"],
+        )
+
+        member_ids: list[int] = list(set(diagnoses["member_id"]))
+
+        with (
+            open(self.storage_dir.joinpath("train_transactions_single.txt"), "w") as train_single,
+            open(self.storage_dir.joinpath("train_transactions_pair.txt"), "w") as train_pair,
+            open(self.storage_dir.joinpath("val_transactions_single.txt"), "w") as val_single,
+            open(self.storage_dir.joinpath("val_transactions_pair.txt"), "w") as val_pair,
+        ):
+            for member_index in tqdm(range(len(member_ids))):
+                member_transactions: pd.DataFrame = diagnoses[
+                    diagnoses["member_id"] == member_ids[member_index]
+                ]
+
+                unique_dates_of_service: utils.CustomOrderedSet = (
+                    utils.CustomOrderedSet()
+                )
+                for date in list(member_transactions["date_of_service"]):
+                    unique_dates_of_service.add(date)
+                dates_of_service: list[int] = [date for date in unique_dates_of_service]
+
+                if len(dates_of_service) == 1:
+                    # оcтавляем для обучения всегда
+                    unique_tokens = self._get_unique_tokens(
+                        member_transactions, dates_of_service[0]
+                    )
+                    train_single.write(" ".join(unique_tokens) + "\n")
+                else:
+                    to_validation: bool = (
+                        True if np.random.uniform() < self.config["epsilon"] else False
+                    )
+
+                    dates_of_service_subset: list[int] = dates_of_service[:-2]
+                    for date_index in range(len(dates_of_service_subset)):
+                        unique_tokens = self._get_unique_tokens(
+                            member_transactions, dates_of_service_subset[date_index]
+                        )
+                        train_single.write(" ".join(unique_tokens) + "\n")
+
+                        if date_index < len(dates_of_service_subset) - 1:
+                            next_unique_tokens = self._get_unique_tokens(
+                                member_transactions,
+                                dates_of_service_subset[date_index + 1],
+                            )
+                            train_pair.write(
+                                " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
+                            )
+
+                    if to_validation:
+                        # отправляем последние 2 транзакции в валидацию
+                        dates_of_service_subset = dates_of_service[-2:]
+                        for date_index in range(len(dates_of_service_subset)):
+                            unique_tokens = self._get_unique_tokens(
+                                member_transactions, dates_of_service_subset[date_index]
+                            )
+                            val_single.write(" ".join(unique_tokens) + "\n")
+
+                            if date_index < len(dates_of_service_subset) - 1:
+                                next_unique_tokens = self._get_unique_tokens(
+                                    member_transactions,
+                                    dates_of_service_subset[date_index + 1],
+                                )
+                                val_pair.write(
+                                    " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
+                                )
+                    else:
+                        # отправляем последние 2 транзакции в обучение
+                        dates_of_service_subset = dates_of_service[-2:]
+                        for date_index in range(len(dates_of_service_subset)):
+                            unique_tokens = self._get_unique_tokens(
+                                member_transactions, dates_of_service_subset[date_index]
+                            )
+                            train_single.write(" ".join(unique_tokens) + "\n")
+
+                            if date_index < len(dates_of_service_subset) - 1:
+                                next_unique_tokens = self._get_unique_tokens(
+                                    member_transactions,
+                                    dates_of_service_subset[date_index + 1],
+                                )
+                                train_pair.write(
+                                    " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
+                                )
+
+    def create_vocab(self) -> None:
+        vocab: set[str] = set()
+
+        with (
+            open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
+            open(self.storage_dir.joinpath("train_transactions_single.txt"), "r") as train_single,
+        ):
+            for transaction in train_single:
+                tokens: list[str] = transaction.split()
+
+                for token in tokens:
+                    if token not in vocab:
+                        vocab.add(token)
+                        vocab_file.write(token + "\n")
+
+    @staticmethod
+    def _get_unique_tokens(subject_transactions: pd.DataFrame, date: int) -> list[str]:
+        transaction: pd.DataFrame = subject_transactions[
+            subject_transactions["date_of_service"] == date
         ]
         tokens: list[str] = list(transaction["icd_code"])
 
