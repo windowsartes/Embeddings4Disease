@@ -25,14 +25,11 @@ class PreprocessorFactory(ABC):
         A11 A22 A33
         B11 B22
 
-        At the second file, we create a seq2seq dataset. So the format must be: source transaction at one line,
-        target transaction at the next line, than blank line. For example:
+        At the second file, we create a seq2seq dataset. So the format must be: source transaction, then comma,
+        then target transaction at the same line. For example:
 
-        A11, A22
-        A22, A33
-
-        B11, B22, B33
-        B22, B44, B55
+        A11 A22,A22 A33
+        B11 B22 B33,B22 B44 B55
 
         Since we haven't done seq2seq yet, this format may change.
         """
@@ -48,7 +45,8 @@ class PreprocessorFactory(ABC):
         A22
         A33
 
-        Also you may or may not add special token at this file, cause they are explicitly specified in the constructor.
+        There is no need to add special tokens at this file, cause they are explicitly specified
+        in the tokenizer's constructor.
         """
         pass
 
