@@ -77,7 +77,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
     def make_train_val_split(self) -> None:
         diagnoses: pd.DataFrame = pd.read_csv(
-            pathlib.Path(os.path.abspath(self.config["data_dir"])).joinpath("diagnoses_icd.csv")
+            pathlib.Path(os.path.abspath(self.config["data"]))
         )
         diagnoses = diagnoses[diagnoses.icd_version == 10]
         diagnoses = self._preprocess_column(
@@ -128,17 +128,10 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                         train_single.write(" ".join(unique_tokens) + "\n")
 
                         if hadm_id_index < len(hadm_id_subset) - 1:
-                            if first_write_train:
-                                first_write_train = False
-                            else:
-                                train_pair.write("\n")
-
-                            train_pair.write(" ".join(unique_tokens) + "\n")
-
-                            unique_tokens = self._get_unique_tokens(
+                            next_unique_tokens = self._get_unique_tokens(
                                 subject_transactions, hadm_id_subset[hadm_id_index + 1]
                             )
-                            train_pair.write(" ".join(unique_tokens) + "\n")
+                            train_pair.write(" ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n")
 
                     if to_validation:
                          # отправляем последние 2 транзакции в валидацию
@@ -150,18 +143,10 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                             val_single.write(" ".join(unique_tokens) + "\n")
 
                             if hadm_id_index < len(hadm_id_subset) - 1:
-                                if first_write_val:
-                                    first_write_val = False
-                                else:
-                                    val_pair.write("\n")
-
-                                val_pair.write(" ".join(unique_tokens) + "\n")
-
-                                unique_tokens = self._get_unique_tokens(
-                                    subject_transactions,
-                                    hadm_id_subset[hadm_id_index + 1],
+                                next_unique_tokens = self._get_unique_tokens(
+                                    subject_transactions, hadm_id_subset[hadm_id_index + 1]
                                 )
-                                val_pair.write(" ".join(unique_tokens) + "\n")
+                                val_pair.write(" ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n")
                     else:
                         # отправляем последние 2 транзакции в обучение
                         hadm_id_subset = hadm_ids[-2:]
@@ -172,18 +157,11 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                             train_single.write(" ".join(unique_tokens) + "\n")
 
                             if hadm_id_index < len(hadm_id_subset) - 1:
-                                if first_write_train:
-                                    first_write_train = False
-                                else:
-                                    train_pair.write("\n")
-
-                                train_pair.write(" ".join(unique_tokens) + "\n")
-
-                                unique_tokens = self._get_unique_tokens(
-                                    subject_transactions,
-                                    hadm_id_subset[hadm_id_index + 1],
+                                next_unique_tokens = self._get_unique_tokens(
+                                    subject_transactions, hadm_id_subset[hadm_id_index + 1]
                                 )
-                                train_pair.write(" ".join(unique_tokens) + "\n")
+                                train_pair.write(" ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n")
+                                
 
     def create_vocab(self) -> None:
         vocab: set[str] = set()
