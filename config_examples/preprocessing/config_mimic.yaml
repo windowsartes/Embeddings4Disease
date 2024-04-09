@@ -1,5 +1,5 @@
 dataset: MIMIC
-data_dir: data/mimic
+data: data/mimic/diagnoses_icd.csv
 storage_dir: data/preprocessed
 code_length: 3
 code_lower_bound: "A"
