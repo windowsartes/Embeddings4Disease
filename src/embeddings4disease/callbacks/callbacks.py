@@ -25,7 +25,7 @@ else:
 
 from embeddings4disease.data.datasets import CustomLineByLineDataset
 from embeddings4disease.data.collators import MaskingCollator
-from embeddings4disease.metrics.metrics import MetricComputer
+from embeddings4disease.metrics.metrics import MLMMetricComputer
 from embeddings4disease.utils import utils
 
 
@@ -92,7 +92,7 @@ class MetricComputerCallback(TrainerCallback):
             collate_fn=MaskingCollator(tokenizer, seq_len),
         )
 
-        self.metric_computer: MetricComputer = MetricComputer(
+        self.metric_computer: MLMMetricComputer = MLMMetricComputer(
             tokenizer, top_k, dataloader
         )
 
@@ -163,7 +163,7 @@ class MetricComputerCallback(TrainerCallback):
         """
         if (state.epoch - 1) % self.period == 0:
             metrics: dict[str, float] = self.metric_computer.get_metrics_value(
-                kwargs["model"].to("cpu"), **self.use_metrics
+                kwargs["model"].to("cpu"), self.use_metrics
             )
 
             kwargs["model"].to(self.device)

@@ -14,7 +14,8 @@ validation:
  metrics: 
   reciprocal_rank: true
   simplified_dcg: true
-  precision: true
-  recall: true
-  f_score: true
-  hit: true
+  precision: false
+  recall: false
+  f_score: false
+  hits: true
+  confidence: true

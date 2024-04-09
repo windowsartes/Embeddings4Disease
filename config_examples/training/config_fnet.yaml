@@ -26,16 +26,17 @@ training:
   weight_decay: 0.01
 validation:
  path_to_data: data/val_transactions_single.txt
- period: 1
+ period: 10
  top_k: 10
  save_graphs: true
  metrics: 
   reciprocal_rank: true
   simplified_dcg: true
-  precision: true
-  recall: true
-  f_score: true
-  hit: true
+  precision: false
+  recall: false
+  f_score: false
+  hits: true
+  confidence: true
 save_trained_model: true
 wandb:
  use: true

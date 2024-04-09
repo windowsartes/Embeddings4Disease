@@ -23,7 +23,7 @@ from transformers import (
 try:
     import wandb  # type: ignore
 except ImportError:
-    warnings.warn("wandb isn't installed so it won't be used.")
+    warnings.warn(ImportWarning("wandb isn't installed so it won't be used."))
     wandb_installed: bool = False
 else:
     wandb_installed = True
@@ -224,7 +224,7 @@ class ArchitectureFactory(ABC):
 
         return training_args
 
-    def create_metric_computer(self) -> tuple[metrics.MetricComputer, dict[str, bool]]:
+    def create_metric_computer(self) -> tuple[metrics.MLMMetricComputer, dict[str, bool]]:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
             self.create_tokenizer()
         )
@@ -240,7 +240,7 @@ class ArchitectureFactory(ABC):
             ),
         )
 
-        metric_computer: metrics.MetricComputer = metrics.MetricComputer(
+        metric_computer: metrics.MLMMetricComputer = metrics.MLMMetricComputer(
             tokenizer, self.config["validation"]["top_k"], dataloader
         )
 
