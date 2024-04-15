@@ -78,7 +78,7 @@ class ArchitectureFactory(ABC):
         """
         working_dir: pathlib.Path = pathlib.Path(utils.get_cwd())
 
-        now = datetime.now() 
+        now = datetime.now()
         data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
 
         storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
@@ -90,9 +90,9 @@ class ArchitectureFactory(ABC):
         """
         This method is used to log into wandb.
         """
-        if wandb_installed and config["wandb"]["use"]:
-            wandb.login(key=config["wandb"]["api_key"])
-            wandb.init(project=config["wandb"]["project"])
+        if wandb_installed and self.config["wandb"]["use"]:
+            wandb.login(key=self.config["wandb"]["api_key"])
+            wandb.init(project=self.config["wandb"]["project"])
 
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
