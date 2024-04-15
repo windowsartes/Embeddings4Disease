@@ -29,6 +29,7 @@ class MaskingCollator:
         last token and applyes the tokenizer.
 
         Args:
+            tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast: model's tokenizer you want to use.
             sequence_batch (list[str]): list of string with tokens separated by space.
 
         Returns:
