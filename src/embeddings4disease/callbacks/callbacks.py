@@ -1,5 +1,4 @@
 import json
-import glob
 import pathlib
 import warnings
 
@@ -79,6 +78,10 @@ class MetricComputerCallback(TrainerCallback):
         self.use_metrics: dict[str, bool] = use_metrics
         self.use_wandb: bool = use_wandb
         self.save_plot: bool = save_plot
+
+        if self.save_plot:
+            sns.set_style("white")
+            sns.color_palette("bright")
 
         for metric, usage in self.use_metrics.items():
             if usage:
@@ -223,6 +226,10 @@ class SaveLossHistoryCallback(TrainerCallback):
         utils.create_dir(loss_storage_dir)
 
         self.save_plot: bool = save_plot
+
+        if self.save_plot:
+            sns.set_style("white")
+            sns.color_palette("bright")
 
     def on_evaluate(  # type: ignore
         self,
