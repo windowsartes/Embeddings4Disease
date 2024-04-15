@@ -13,7 +13,7 @@ TBA
   - [Usage](#usage)
     - [CLI for training](#cli-for-training)
     - [CLI for validation](#cli-for-validation)
-    - [CLI fro preprocessing](#cli-fro-preprocessing)
+    - [CLI for preprocessing](#cli-for-preprocessing)
   - [Additional examples](#additional-examples)
   - [Tests](#tests)
 
@@ -80,7 +80,7 @@ validate_backbone *path-to-config*
 
 As during training, the path to the config file must be specified relative to the current directory or it must be an absolute path. Examples and descriptions you can find [there](./config_examples/validate/).
 
-### CLI fro preprocessing
+### CLI for preprocessing
 
 The training and validation CLIs expect the data to be in the specific format: one transaction on one line. To bring the data into this format and also be able to create a tokenizer using a dictionary file, we have a CLI to pre-process the data.
 
