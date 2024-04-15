@@ -16,7 +16,7 @@ class FillMaskPipelineResult(tp.TypedDict):
     token_str: str
 
 
-METRIC_REGISTER = {}
+METRIC_REGISTER: dict[str, tp.Callable[[str, list[str], list[float]], float]] = {}
 
 def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Callable[[str, list[str], list[float]], float]:
     METRIC_REGISTER[function.__name__[10:]] = function
@@ -24,19 +24,24 @@ def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Ca
 
 
 class MetricComputerInterface(ABC):
+    """
+    Base class for the metric computer. It contains the metrics we support. In the case you want to add new metric just
+    implement it there and mark it with the 'metric' decorator defined above.
+    """
     @abstractmethod
     def get_metrics_value(self, *args, **kwargs) -> dict[str, float]: # type: ignore
         pass
 
     @metric
     @staticmethod
-    def __compute_reciprocal_rank(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+    def _compute_reciprocal_rank(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes reciprocal rank over one example.
 
         Args:
-            answer (str): true token's value;
-            predicted_tokens (list[str]): tokens you model predicted.
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
 
         Returns:
             float: reciprocal rank's value.
@@ -48,13 +53,14 @@ class MetricComputerInterface(ABC):
 
     @metric
     @staticmethod
-    def __compute_simplified_dcg(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+    def _compute_simplified_dcg(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes simpified DCG over one example.
 
         Args:
-            answer (str): true token's value;
-            predicted_tokens (list[str]): tokens you model predicted.
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
 
         Returns:
             float: simpified DCG's value.
@@ -66,14 +72,14 @@ class MetricComputerInterface(ABC):
 
     @metric
     @staticmethod
-    def __compute_precision(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+    def _compute_precision(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes precision over one example.
 
         Args:
-        answer (str): true token's value;
-        predicted_tokens (list[str]): tokens you model predicted.
-
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
 
         Returns:
             float: precision's score.
@@ -85,7 +91,7 @@ class MetricComputerInterface(ABC):
 
     @metric
     @staticmethod
-    def __compute_recall(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+    def _compute_recall(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes recall over one example.
 
@@ -96,8 +102,9 @@ class MetricComputerInterface(ABC):
         so it's always equals to 1
 
         Args:
-            answer (str): true token's value;
-            predicted_tokens (list[str]): tokens you model predicted._
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
 
         Returns:
             float: recall's value.
@@ -110,28 +117,40 @@ class MetricComputerInterface(ABC):
 
     @metric
     @staticmethod
-    def __compute_f_score(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float], beta: float = 1.) -> float:
+    def _compute_f_score(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float], beta: float = 1.) -> float:
         """
-        TBA
+        Computes f-beta score.
 
         Args:
-            answer (str): _description_
-            predicted_tokens (list[str]): _description_
-            beta (falot, optional): _description_. Defaults to 1..
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
+            beta (falot, optional): beta coefficient. Defaults to 1.
 
         Returns:
-            float: _description_
+            float: f-score's value.
         """
         eps = 1e-9
 
-        precision = MLMMetricComputer.__compute_precision(answer, predicted_tokens, tokens_probabilities)
-        recall = MLMMetricComputer.__compute_recall(answer, predicted_tokens, tokens_probabilities)
+        precision = MLMMetricComputer._compute_precision(answer, predicted_tokens, tokens_probabilities)
+        recall = MLMMetricComputer._compute_recall(answer, predicted_tokens, tokens_probabilities)
 
         return ((1 + beta**2) * precision * recall) / ((beta**2) * precision + recall + eps)
 
     @metric
     @staticmethod
-    def __compute_confidence(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+    def _compute_confidence(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+        """
+        There confidence is a probability of a true token in the case you model has predicted it, else 0.
+
+        Args:
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
+
+        Returns:
+            float: confidence score.
+        """
         for token, probability in zip(predicted_tokens, tokens_probabilities):
             if token == answer:
                 return probability
@@ -140,16 +159,17 @@ class MetricComputerInterface(ABC):
 
     @metric
     @staticmethod
-    def __compute_hits(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> int:
+    def _compute_hits(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
         """
         Computes HITS value on one example;
 
         Args:
-            answer (str): true token's value;
-            predicted_tokens (list[str]): tokens you model predicted.
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
 
         Returns:
-            int: HITS' value.
+            float: HITS' value.
         """
         return predicted_tokens.count(answer)
 
@@ -183,35 +203,23 @@ class MLMMetricComputer(MetricComputerInterface):
         metrics_to_use: dict[str, bool],
     ) -> dict[str, float]:
         """
-        Using this method you can evaluate your model. It will compute metric's value on all the data from
-        the dataloader and return it's average score. For now it supports only these metrics:
-        reciprocal rank, simplified DCG, precision, recall, F_1 score and HITS. In the case you want add an
-        extra one, follow this guide:
-        1. add metric's name as a boolean method parameter;
-        2. add private method for that computes your metric's value over 1 object;
-        3. don't forget to initialize an empty list for metric's values, call private function during evaluation
-            after fill-mask pipeline, compute and return metric's average score as a dict key-value pair;
-        4. Also you want to use this metric during cli training or inference, add it to the config file;
+        Base method for the model evaluation. It will computer metrics values during the dataloader you've specified
+        at the instance initialization.
 
         Args:
-            model (PreTrainedModel): Bert-like model which performance you want to evaluate.
-            reciprocal_rank (bool, optional): compute or not reciprocal rank . Defaults to False.
-            simplified_dcg (bool, optional): compute or not simplified DCG. Defaults to False.
-            precision (bool, optional): compute or not precision. Defaults to False.
-            recall (bool, optional): compute or not recall. Defaults to False.
-            f_score (bool, optional): compute or not F_1 score. By design it's True only
-                        if recall and precision are both True. Defaults to False.
-            hit (bool, optional): compute or not HITS. Defaults to False.
+            model (PreTrainedModel): model you want to evaluate.
+            metrics_to_use (dict[str, bool]): metrics you want to use during inference. In the case some metric you've
+            passed in this dictionary doesn't supported, it'll be ignored.
 
         Returns:
-            dict[str, float]: a dictionary with metric's average metrics values over dataloader's data
+            dict[str, float]: average metrics's values during evaluation.
         """
         metrics_storage: dict[str, list[float]] = {}
         for metric, usage in metrics_to_use.items():
             if usage:
                 if metric not in METRIC_REGISTER:
                     warnings.warn(
-                        f"There is no {metric} in the supported metrics so this key will be ignored",
+                        f"There is no {metric} in the supported metrics so it will be ignored",
                         SyntaxWarning
                     )
                 else:
@@ -271,6 +279,10 @@ class MLMMetricComputer(MetricComputerInterface):
 
 
 class Baseline(MetricComputerInterface):
+    """
+    A simple baseline model. It just uses the most populat top_k tokens as a prediction.
+
+    """
     def __init__(self,
                  config: dict[str, tp.Any],
         ):
@@ -288,19 +300,16 @@ class Baseline(MetricComputerInterface):
         self._config = config
         self._counter: Counter[str] = Counter(dict(sorted(counter.items(), key=lambda item: item[1], reverse=True)))
         self._top_k_predictions: dict[str, float] = {key: value/number_of_tokens for key, value in self._counter.most_common(config["top_k"])}
-        # true_counter.most_common(top_k)
 
     def get_metrics_value(
         self,
     ) -> dict[str, float]:
         """
-
-        Args:
-            path_to_validation_file (str | pathlib.Path): _description_
-            metrics_to_use (dict[str, float]): _description_
+        Base method for the baseline evaluation. It will computer metrics values during the validation data you've specified
+        at the config.
 
         Returns:
-            dict[str, float]: _description_
+            dict[str, float]: average metrics's values during evaluation.
         """
         metrics_storage: dict[str, list[float]] = {}
         for metric, usage in self._config["metrics"].items():
