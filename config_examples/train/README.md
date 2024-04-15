@@ -1,95 +1,90 @@
 # Config for training
 
-Здесь я опишу структуру конфигов, чтобы вы смогли настроить обучение так, как вам будет нужно.
-Для дольшинства моделей подойдёт файл config.yaml, но некоторые всё же отличаются своими параметрами, поэтому для части архитектур существуют собственные шаблоны.
+Here I describe the structure of the configs so that you can customize the training processs in the way you need.
+For the most ot the models, the config.yaml file is suitable, but some models still differ in their parameters, so some of the architectures have their own templates.
 
-**ВАЖНО**:
-1. Все пути следует указывать относительно той директории, откуда вы используйте cli.
-2. Float'ы следует писать в явном виде: 0.0001 вместо 1e-4.
+**IMPORTANT**:
 
-## Config
+1. All the paths must be relative to the current working directory or absolute where you are using the cli.
+2. Floats must be written explicitly: 0.0001 instead of 1e-4.
 
-Стандартный шаблон - он подойдёт для BERT/ConvBERT/DeBERTa/RoBERTa/RoFormer/XLMRoBERTa
+## Config structure
 
-Структура:
+This is a standart template - it works with BERT/ConvBERT/DeBERTa/RoBERTa/RoFormer/XLMRoBERTa.
 
-- model - конфигурация модели.
-  - type: (str) - BERT/ConvBERT/DeBERTa/MobileBERT/RoBERTa/RoFormer/XLMRoBERTa.
-  - use_pretrained: false/true - если true, то загружается предобученная модель, если false, то создаётся новая модель по секции config.
-  - path_to_saved_weights: null/путь-до-модели - если null, то загружается модель с hugging face, иначе - из указанной          директории.
-  - config - игнорируется, если use_pretrained == false.
-    - hidden_size: (uint) - размер эмбеддинга.
-    - num_attention_heads: (uint) - количество голов.
-    - num_hidden_layers: (uint) - количество энкодеров (encoder layer'ов).
+- model
+  - type: str; BERT/ConvBERT/DeBERTa/MobileBERT/RoBERTa/RoFormer/XLMRoBERTa/your-custom-backbone.
+  - use_pretrained: bool; if true, then the pretrained model is loaded, if false, then a new model is created based on the config section.
+  - path_to_saved_weights: null/str; if null, then the model is loaded from hugging face, otherwise - from the specified directory.
+  - config: will be ignored if use_pretrained == false.
+    - hidden_size: uint; embedding size.
+    - num_attention_heads: uint; number of heads.
+    - num_hidden_layers: uint; number of encoder layers.
 - tokenizer:
-  - use_pretrained: false/true - использовать предобученный токенайзер или нет.
-  - path_to_saved_tokenizer: null/путь-до-токенайзера - игнорируется, если use_pretrained == false. Если none, то используется токенайзер с hugging face, иначе - тот, до которого указан путь.
-  - path_to_vocab_file: путь-до-vocab-txt - игнорируется, если use_pretrained == true. Путь до vocab.txt файла, в котором перечислены токены.
-- hyperparameters - гиперпараметры обучения.
-  - batch_size: (uint) - размер батча.
-  - seq_len: (uint) - макисмальный размер транзакции (не считая служебных токенов).
-- storage_path - путь до директории, в которую будут сохраняться логи, чекпоинты и т.д.
-- training - параметры обучения.
-  - device: cpu/cuda:0/... - дейвайс, на котором будут происходить вычисления.
-  - path_to_data - путь до файла с тренировочными данными.
-  - n_epochs: (uint) - количество эпох.
-  - n_warmup_epochs: (uint) - количество warm-up эпох.
-  - n_checkpoints: (uint) - количество одновременно существующих чекпоинтов.
-  - optimizer_parameters - параметры для AdamW.
-    - learning_rate: (float)
-    - adam_beta1: (float)
-    - adam_beta2: (float)
-    - weight_decay: (float)
-- validation - параметры валидации.
-  - path_to_data - путь до файла с валидационными данными.
-  - period: (uint) - раз в сколько эпох нужно проводить валидацию модели. 
-  - top_k: (uint) - сколько предсказаний делать для [MASK]. 
-  - save_graphs: false/true - сохранять ли значения метрик и лосс в процессе обучения в виде графиков.
-  - metrics - какие метрики использовать для валидации.
-    - reciprocal_rank: false/true
-    - simplified_dcg: false/true
-    - precision: false/true
-    - recall: false/true
-    - f_score: false/true
-    - hit: false/true
-- save_trained_model: false/true - нужно ли сохранять модель после обучения.
-- wandb - параметры интеграции с weights and biases. Для использования требуется опциональная зависимость "wandb".
-  - use: false/true - логгировать метрики и loss на weights and biases или нет.
-  - project: (str) - название проекта.
-  - api_key: (str) - ваш api-ключ от wandb.
+  - use_pretrained: bool; use a pretrained tokenizer or not.
+  - path_to_saved_tokenizer: null/str; **Will be ignored, if use_pretrained == false**. if null, then the tokenizer is loaded from hugging face, otherwise - from the specified directory.
+  - path_to_vocab_file: str; **Will be ignored, if use_pretrained == true**. Path to the vocab.txt that lists the tokens.
+- hyperparameters:
+  - batch_size: uint; batch size.
+  - seq_len: uint; maximum size of the input sequence (not including utility tokens).
+- training:
+  - device: cpu/cuda:0/...; device you want to use.
+  - path_to_data: str;
+  - n_epochs: uint; number of epochs.
+  - n_warmup_epochs: uint; number of warm-up epochs.
+  - n_checkpoints: uint; number of checkpoints.
+  - optimizer_parameters:
+    - learning_rate: float
+    - adam_beta1: float
+    - adam_beta2: float
+    - weight_decay: float
+- validation:
+  - path_to_data: str
+  - period: uint; once every prediod epochs the model will be validated. 
+  - top_k: uint; how many predictions will the model generate for the [MASK] token.
+  - save_graphs: bool; whether to save metric and loss values during the training process in the image format.
+  - metrics: which metrics will be used.
+    - reciprocal_rank: bool
+    - simplified_dcg: bool
+    - precision: bool
+    - recall: bool
+    - f_score: bool
+    - hit: bool
+    - confidence: bool
+- save_trained_model: bool; save trained model of not.
+- wandb - parameters for the Weights and Biases integration. The optional "wandb" dependency is required.
+  - use: bool
+  - project: str; projects name.
+  - api_key: str; your api-key.
 
-У некоторых моделей архитектура отличается от BERT'a, поэтому их секция model будет отличатся, в остальном - всё то же самое.
+Some models have different architecture from BERT, so their model config section will be different. Everything else is the same.
 
 ### FNet
 
-- model - конфигурация модели.
-  - type: (str) - FNet.
-  - use_pretrained: false/true - если true, то загружается предобученная модель, если false, то создаётся новая модель по секции config. 
-  - path_to_saved_weights: null/путь-до-модели - если null, то загружается модель с hugging face, иначе - из указанной          директории.
-  - config - игнорируется, если use_pretrained == false.
-    - hidden_size: (uint) - размер эмбеддинга.
-    - num_hidden_layers: (uint) - количество слоёв.
-    - intermediate_size: (uint) - в оригинальной статье = 4 * hidden_szie.
+- model:
+  - type: str; FNet.
+  - config: will be ignored if use_pretrained == false.
+    - hidden_size: uint; embedding size.
+    - num_hidden_layers: uint; number of jidden layers.
+    - intermediate_size: uint; in the original paper equals to 4*hidden_size.
 
 ### FunnelTransformer
 
-- model - конфигурация модели.
-  - type: FunnelTransformer
-  - use_pretrained: false
-  - path_to_saved_weights: null
+- model:
+  - type: str; FunnelTransformer
   - config:
-    - d_model: (uint) - размер скрытого состояния.
-    - n_head: (uint) 6 - количество голов в одном layer'e. В статье 3 слоя (значение по умолчанию, оставил таким же) с 6 головами эквивалентны BERT_base.
-    - d_inner: (uint) - выход после первого линейного слоя в FF.
+    - d_model: uint; hidden size.
+    - n_head: uint; number of heads in a single encoder layer. In the paper equals 6.
+    - d_inner: uint; FF's first linear layer's output.
 
-## Параметры моделей и оптимизаторов
+## Model and optimizer parameters.
 
-Здесь в табличке будут указаны гиперпараметры моделей: количество голов, количество энкодеров и параметры оптимизаторы. 
-Предобученные модели, которые лежат на huggingface, обучались именно в такой конфигурации. Параметры моделей я брал из статей из расчёта на эквивалентность BERT_base'у, а параметры оптимизаторов - те, которые авторы статей использовали для предобучения. Размер батча здесь указан из расчёта на максимальный размер, который влезет на одну P100.
-Если параметров в статье указано не было и я не нашёл их в репках, то я использовал параметры от BERT'а.
+The table will show you the hyperparameters of the models: the number of heads, the number of encoders and optimizer parameters.
+The pre-trained models that stored on huggingface were trained in exactly this configuration. I took the model parameters from the articles based on equivalence to BERT base, and the optimizer parameters were those that the authors of the articles used for pre-training. The batch size here is based on the maximum size that will fit on one P100.
+If the parameters were not specified in the article and I did not find them in the open source realizations, then I used the parameters from BERT.
 
 
-| модель/параметр | BERT | ConvBERT | DeBERTa | MobileBERT | RoBERTa | RoFormer |XLMRoBERTa |
+| model/parameters | BERT | ConvBERT | DeBERTa | MobileBERT | RoBERTa | RoFormer |XLMRoBERTa |
 | -------- | ------- | ------- | ------- | ------- | ------- | ------- | ------- |
 | batch_size | 1024 | 512 | 512 | 1024 | 1024 | 1024 | 1024 |
 | num_attention_heads | 12 | 12 | 12 | 4 | 12 | 12 | 12 |
@@ -99,7 +94,7 @@
 | beta2 | 0.999 | 0.999 | 0.98 | 0.98 | 0.98 | 0.98 | 0.999 |
 
 
-| модель/параметр | FNet | FunnelTransformer |
+| model/parameters | FNet | FunnelTransformer |
 | -------- | ------- | ------- |
 | batch_size | 1024 | 512 |
 | hidden_size | 384 | - |

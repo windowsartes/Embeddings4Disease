@@ -1,30 +1,31 @@
 # Config for validation
 
-А здесь я опишу структуру конфига, который используется для валидации моделей.
+Here you will find a description of a structure of the config using by the validation CLI.
 
-**ВАЖНО**:
+**IMPORTANT**:
 
-Все пути следует указывать относительно той директории, откуда вы используйте cli.
+All the paths must be relative to the current working directory or absolute where you are using the cli.
 
-## Config
+## Config structure
 
-- model - конфигурация модели
-  - type: (str) - BERT/ConvBERT/DeBERTa/FNet/FunnelTransformer/MobileBERT/RoBERTa/RoFormer/XLMRoBERTa.
-  - use_pretrained: false/true - **всегда true**, это нужно для совместимости с конфигом для обучения.
-  - path_to_saved_weights: null/путь-до-модели - если null, то загружается модель с hugging face, иначе - из указанной          директории.
-- tokenizer - конфигурация токенайзера.
-  - use_pretrained: false/true - **всегда true**, это нужно для совместимости с конфигом для обучения.
-  - path_to_saved_tokenizer: null/путь-до-токенайзера - если none, то используется токенайзер с hugging face, иначе - тот, до которого указан путь.
-- hyperparameters гиперпараметры обучения.
-  - batch_size: (uint) - размер батча.
-  - seq_len: (uint) - макисмальный размер транзакции (не считая служебных токенов).
- - validation - параметры валидации.
-   - path_to_data - путь до файла с валидационными данными.t
-   - top_k: (uint) - сколько предсказаний делать для [MASK].
-   - metrics - какие метрики использовать для валидации.
-     - reciprocal_rank: false/true
-     - simplified_dcg: false/true
-     - precision: false/true
-     - recall: false/true
-     - f_score: false/true
-     - hit: false/true
+- model:
+  - type: str; BERT/ConvBERT/DeBERTa/FNet/FunnelTransformer/MobileBERT/RoBERTa/RoFormer/XLMRoBERTa/your-custom-backbone.
+  - use_pretrained: **always true**; this is necessary for compatibility with the training config.
+  - path_to_saved_weights: null/str; if null, then the model is loaded from hugging face, otherwise - from the specified directory.
+- tokenizer:
+  - use_pretrained: **always true**; this is necessary for compatibility with the training config.
+  - path_to_saved_tokenizer: null/str; if null, then the tokenizer is loaded from hugging face, otherwise - from the specified directory.
+- hyperparameters:
+  - batch_size: uint; batch size.
+  - seq_len: uint; maximum size of the input sequence (not including utility tokens).
+ - validation:
+   - path_to_data: str; path to the file with validation data.
+   - top_k: uint; how many predictions will the model generate for the [MASK] token.
+   - metrics: which metrics will be used.
+     - reciprocal_rank: bool
+     - simplified_dcg: bool
+     - precision: bool
+     - recall: bool
+     - f_score: bool
+     - hit: bool
+     - confidence: bool

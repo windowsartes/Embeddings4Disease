@@ -1,17 +1,22 @@
 # Config for preprocessing
 
-В целом, здесь у супер-класса нет никаких реализованных методов, поэтому от конфига какого-то формата не ожидается, кроме 
-строчки "dataset: название-датасета", чтобы фабрика вызвала класс "название-датасетаPreprocessorFactory".
+In general, preprocessor's super class doesn't have any implemented methods, so working with your own dataset you shouldn't rely on any form from the config, except the line "dataset: dataset-name", so  the factory can properly create the class "dataset-namePreprocessorFactory".
 
-Например, в примере конфига для MIMIC указано "dataset: MIMIC", поэтому фабрика создаст экземпляр класса MIMICPreprocessorFactory.
+For example, in the config for the MIMIC-4 dataset there is a line "dataset: MIMIC", so the factory will create a MIMICPreprocessorFactory instance.
+
+**IMPORTANT**:
+
+All the paths must be relative to the current working directory or absolute where you are using the cli.
 
 ## MIMIC
 
+Here you can find a description of MIMIC's config example.
+
 - dataset: MIMIC
-- data_dir: (str) - путь до директории с данными, которые нужно преобразовать.
-- storage_dir (str) - путь до директории, в которой будут хранится преобразованные данные.
-- code_length: (uint) - столько первых символов от ICD-10 кода мы оставляем.
-- code_lower_bound: (str) - нижняя граница для релеватных кодов, включительно.
-- code_upper_bound: (str) - верхняя граница для релеватных кодов, включительно. 
-- epsilon: (float) - с какой вероятностью последние 2 транзакции пациента будут отправлены в валидацию.
-- random_seed: (int) - сид для детерминизма рандома.
+- data: str; path to the raw data.
+- storage_dir: str; path to the directory in which the preprocessed data will be stored.
+- code_length: uint; how many first characters from ICD-10 do we use.
+- code_lower_bound: str; lower limit for relevant codes, inclusive.
+- code_upper_bound: str; upper limit for relevant codes, inclusive. 
+- epsilon: float; probability to which the last 2 transactions of the patient will be sent for validation.
+- random_seed: int; random seed.
