@@ -19,7 +19,7 @@ class FillMaskPipelineResult(tp.TypedDict):
 METRIC_REGISTER: dict[str, tp.Callable[[str, list[str], list[float]], float]] = {}
 
 def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Callable[[str, list[str], list[float]], float]:
-    METRIC_REGISTER[function.__name__[10:]] = function
+    METRIC_REGISTER[function.__name__[9:]] = function
     return function
 
 
