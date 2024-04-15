@@ -65,7 +65,7 @@ Scripts will be generated and added automatically after installing the packages 
 To train a backbone model, execute this command:
 
 ```bash
-training *path-to-config*
+train_backbone *path-to-config*
 ```
 
 Path to the config must be relative to your current working directory or it must be absolute. Also all the pathes inside this config must be relative to your current working directory or absolute. Config examples and their full descriptions you can find [there](./config_examples/train/).
@@ -75,7 +75,7 @@ Path to the config must be relative to your current working directory or it must
 Also there is a CLI for the model validation:
 
 ```bash
-validation *path-to-config*
+validate_backbone *path-to-config*
 ```
 
 As during training, the path to the config file must be specified relative to the current directory or it must be an absolute path. Examples and descriptions you can find [there](./config_examples/validate/).
@@ -85,7 +85,7 @@ As during training, the path to the config file must be specified relative to th
 The training and validation CLIs expect the data to be in the specific format: one transaction on one line. To bring the data into this format and also be able to create a tokenizer using a dictionary file, we have a CLI to pre-process the data.
 
 ```bash
-preprocessing *path-to-config*
+preprocess *path-to-config*
 ```
 
 Details for creating the config, as well as an example for preprocessing MIMIC-4, you can find [there](./config_examples/preprocess/).
