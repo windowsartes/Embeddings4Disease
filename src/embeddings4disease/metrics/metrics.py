@@ -1,6 +1,5 @@
 import typing as tp
 import warnings
-import pathlib
 from abc import ABC, abstractmethod
 from collections import defaultdict, Counter
 
@@ -26,7 +25,7 @@ def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Ca
 
 class MetricComputerInterface(ABC):
     @abstractmethod
-    def get_metrics_value(self, *args, **kwargs):
+    def get_metrics_value(self, *args, **kwargs) -> dict[str, float]: # type: ignore
         pass
 
     @metric
@@ -181,7 +180,7 @@ class MLMMetricComputer(MetricComputerInterface):
     def get_metrics_value(
         self,
         model: PreTrainedModel,
-        metrics_to_use: dict[str, float],
+        metrics_to_use: dict[str, bool],
     ) -> dict[str, float]:
         """
         Using this method you can evaluate your model. It will compute metric's value on all the data from
@@ -278,7 +277,7 @@ class Baseline(MetricComputerInterface):
         super().__init__()
 
         counter: tp.DefaultDict[str, int] = defaultdict(int)
-        
+
         with open(config["path_to_training_file"], "r") as training_file:
             for transaction in training_file:
                 tokens = transaction.strip().split(" ")
@@ -288,15 +287,13 @@ class Baseline(MetricComputerInterface):
         number_of_tokens: int = sum(counter.values())
         self._config = config
         self._counter: Counter[str] = Counter(dict(sorted(counter.items(), key=lambda item: item[1], reverse=True)))
-        self._top_k_predictions = self._counter.most_common(config["top_k"])
-        self._top_k_predictions = {key: value/number_of_tokens for key, value in self._top_k_predictions}
+        self._top_k_predictions: dict[str, float] = {key: value/number_of_tokens for key, value in self._counter.most_common(config["top_k"])}
         # true_counter.most_common(top_k)
 
     def get_metrics_value(
         self,
     ) -> dict[str, float]:
         """
-        
 
         Args:
             path_to_validation_file (str | pathlib.Path): _description_
@@ -316,15 +313,13 @@ class Baseline(MetricComputerInterface):
                 else:
                     metrics_storage[metric] = []
 
-        predicted_tokens = list(self._top_k_predictions.keys())
-        tokens_probabilities = list(self._top_k_predictions.values())
+        predicted_tokens: list[str] = list(self._top_k_predictions.keys())
+        tokens_probabilities: list[float] = list(self._top_k_predictions.values())
 
         with open(self._config["path_to_validation_file"], "r") as validation_file:
-            for input_sequence in tqdm(validation_file):
-                input_sequence = input_sequence.strip().split(" ")
+            for input_sequence in validation_file:
+                answer: str = input_sequence.strip().split(" ")[-1]
 
-                answer = input_sequence[-1]
-                
                 for metric in metrics_storage:
                     metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
 
