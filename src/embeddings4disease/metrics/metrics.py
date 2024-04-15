@@ -1,5 +1,8 @@
 import typing as tp
 import warnings
+import pathlib
+from abc import ABC, abstractmethod
+from collections import defaultdict, Counter
 
 import numpy as np
 import torch
@@ -21,28 +24,10 @@ def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Ca
     return function
 
 
-class MLMMetricComputer:
-    """
-    Basic class for evalution model's performance.
-    In the initializer you need to pass following argimnets:
-    Args:
-        tokenizer (PreTrainedTokenizer): tokenizer you want to use.
-        top_k (int): top k predictions that model will prodice to replace [MASK]ed toke.
-        dataloader (DataLoader): DataLoader which will produce the data during inference.
-
-    Metrics you want to track and the model you want to evaluate you will specify in the
-    'get_metrics_value' method.
-    """
-
-    def __init__(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        top_k: int,
-        dataloader: DataLoader,
-    ):
-        self.tokenizer: PreTrainedTokenizer = tokenizer
-        self.top_k: int = top_k
-        self.dataloader: DataLoader = dataloader
+class MetricComputerInterface(ABC):
+    @abstractmethod
+    def get_metrics_value(self, *args, **kwargs):
+        pass
 
     @metric
     @staticmethod
@@ -169,6 +154,30 @@ class MLMMetricComputer:
         """
         return predicted_tokens.count(answer)
 
+
+class MLMMetricComputer(MetricComputerInterface):
+    """
+    Basic class for evalution model's performance.
+    In the initializer you need to pass following argimnets:
+    Args:
+        tokenizer (PreTrainedTokenizer): tokenizer you want to use.
+        top_k (int): top k predictions that model will prodice to replace [MASK]ed toke.
+        dataloader (DataLoader): DataLoader which will produce the data during inference.
+
+    Metrics you want to track and the model you want to evaluate you will specify in the
+    'get_metrics_value' method.
+    """
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        top_k: int,
+        dataloader: DataLoader,
+    ):
+        self.tokenizer: PreTrainedTokenizer = tokenizer
+        self.top_k: int = top_k
+        self.dataloader: DataLoader = dataloader
+
     def get_metrics_value(
         self,
         model: PreTrainedModel,
@@ -253,6 +262,71 @@ class MLMMetricComputer:
 
                     for metric in metrics_storage:
                         metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
+
+        metrics_value: dict[str, float] = {}
+
+        for metric in metrics_storage:
+            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+
+        return metrics_value
+
+
+class Baseline(MetricComputerInterface):
+    def __init__(self,
+                 config: dict[str, tp.Any],
+        ):
+        super().__init__()
+
+        counter: tp.DefaultDict[str, int] = defaultdict(int)
+        
+        with open(config["path_to_training_file"], "r") as training_file:
+            for transaction in training_file:
+                tokens = transaction.strip().split(" ")
+                for token in tokens:
+                    counter[token] += 1
+
+        number_of_tokens: int = sum(counter.values())
+        self._config = config
+        self._counter: Counter[str] = Counter(dict(sorted(counter.items(), key=lambda item: item[1], reverse=True)))
+        self._top_k_predictions = self._counter.most_common(config["top_k"])
+        self._top_k_predictions = {key: value/number_of_tokens for key, value in self._top_k_predictions}
+        # true_counter.most_common(top_k)
+
+    def get_metrics_value(
+        self,
+    ) -> dict[str, float]:
+        """
+        
+
+        Args:
+            path_to_validation_file (str | pathlib.Path): _description_
+            metrics_to_use (dict[str, float]): _description_
+
+        Returns:
+            dict[str, float]: _description_
+        """
+        metrics_storage: dict[str, list[float]] = {}
+        for metric, usage in self._config["metrics"].items():
+            if usage:
+                if metric not in METRIC_REGISTER:
+                    warnings.warn(
+                        f"There is no {metric} in the supported metrics so this key will be ignored",
+                        SyntaxWarning
+                    )
+                else:
+                    metrics_storage[metric] = []
+
+        predicted_tokens = list(self._top_k_predictions.keys())
+        tokens_probabilities = list(self._top_k_predictions.values())
+
+        with open(self._config["path_to_validation_file"], "r") as validation_file:
+            for input_sequence in tqdm(validation_file):
+                input_sequence = input_sequence.strip().split(" ")
+
+                answer = input_sequence[-1]
+                
+                for metric in metrics_storage:
+                    metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
 
         metrics_value: dict[str, float] = {}
 
