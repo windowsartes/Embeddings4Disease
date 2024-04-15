@@ -50,6 +50,8 @@ class MetricComputerCallback(TrainerCallback):
         top_k (int, optional): number of prediction for every [MASK] your model will produce. Defaults to 10.
         batch_size (int, optional): batch size for dataloader. Defaults to 1024.
         seq_len (int, optional): maximum length in tokens one input sequence can have. Defaults to 24.
+        use_wandb (bool, optional): allow wandb logging or not. Wandb module must be installed inside your venv.
+        save_plot (bool, optional): should metrics and loss history be saved as a plot during training/validation.
     """
 
     def __init__(
@@ -199,8 +201,8 @@ class MetricComputerCallback(TrainerCallback):
 
                         ax.plot(x_ticks, values)
 
-                        plt.title(f"Значения {metric_name} на валидации")
-                        plt.xlabel("Эпоха")
+                        plt.title(f"Value of {metric_name} on validation")
+                        plt.xlabel("Epoch")
 
                         plt.savefig(self.metrics_storage_dir.joinpath(
                             pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
@@ -272,13 +274,13 @@ class SaveLossHistoryCallback(TrainerCallback):
             ax.grid(which="minor", alpha=0.2)
             ax.grid(which="major", alpha=0.5)
 
-            ax.plot(epoch_history, loss_train_history, label="Обучение")
-            ax.plot(epoch_history, loss_val_history, label="Валидация")
+            ax.plot(epoch_history, loss_train_history, label="Training")
+            ax.plot(epoch_history, loss_val_history, label="Validation")
 
             plt.xticks(rotation=45)
 
-            plt.title("Изменение loss-функции за время обучения")
-            plt.xlabel("Количество эпох")
+            plt.title("Loss during trainig")
+            plt.xlabel("Number of epochs")
             plt.legend()
 
             plt.savefig(self.loss_storage_dir.joinpath("loss.png"))

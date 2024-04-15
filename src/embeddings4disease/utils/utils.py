@@ -55,7 +55,7 @@ def create_dir(path: str | pathlib.Path) -> None:
     Creates a directory by given path.
 
     Args:
-        path (str | pathlib.Path): path to dir.
+        path (str | pathlib.Path): path to the directory.
     """
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
@@ -64,7 +64,7 @@ def delete_files(path: str | pathlib.Path) -> None:
     Deletes all the files from directory by given path.
 
     Args:
-        path (str | pathlib.Path): path to dir.
+        path (str | pathlib.Path): path to the directory.
     """
     for filename in os.listdir(str(path)):
         file_path = pathlib.Path(path).joinpath(filename)
@@ -75,11 +75,23 @@ def delete_files(path: str | pathlib.Path) -> None:
             shutil.rmtree(file_path)
 
 def get_project_root() -> pathlib.Path:
+    """
+    Returns a path to the package base directory.
+
+    Returns:
+        pathlib.Path: this package directory inside your system.
+    """
     with importlib.resources.path("embeddings4disease", "__init__.py") as src_path:
         path = src_path.parents[2]
     return path
 
 def get_cwd() -> str:
+    """
+    Returns your current working directory.
+
+    Returns:
+        str: your cwd.
+    """
     if platform.system() == "Windows":
         result = subprocess.run("cd", text=True, stdout=subprocess.PIPE, shell=True)
         return result.stdout.strip()
