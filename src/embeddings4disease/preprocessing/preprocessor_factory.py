@@ -12,6 +12,9 @@ from embeddings4disease.utils import utils
 
 
 class PreprocessorFactory(ABC):
+    """
+    Base class for preprocessor.
+    """
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
 
@@ -61,6 +64,9 @@ def preprocessor(cls: tp.Type[PreprocessorFactory]) -> tp.Type[PreprocessorFacto
 
 @preprocessor
 class MIMICPreprocessorFactory(PreprocessorFactory):
+    """
+    Preprocessor for the [MIMIC-4](https://physionet.org/content/mimiciv/2.2/) dataset.
+    """
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -107,7 +113,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                 hadm_ids: list[int] = [hadm_id for hadm_id in unique_hadm_ids]
 
                 if len(hadm_ids) == 1:
-                    # оcтавляем для обучения всегда
+                    # always send to training
                     unique_tokens = self._get_unique_tokens(
                         subject_transactions, hadm_ids[0]
                     )
@@ -133,7 +139,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                             )
 
                     if to_validation:
-                        # отправляем последние 2 транзакции в валидацию
+                        # send the last 2 transactions to validation
                         hadm_id_subset = hadm_ids[-2:]
                         for hadm_id_index in range(len(hadm_id_subset)):
                             unique_tokens = self._get_unique_tokens(
@@ -150,7 +156,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                                     " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
                                 )
                     else:
-                        # отправляем последние 2 транзакции в обучение
+                        # send the last 2 transactions to training
                         hadm_id_subset = hadm_ids[-2:]
                         for hadm_id_index in range(len(hadm_id_subset)):
                             unique_tokens = self._get_unique_tokens(
@@ -186,6 +192,16 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
     def _get_unique_tokens(
         subject_transactions: pd.DataFrame, hadm_id: int
     ) -> list[str]:
+        """
+        Returns unique diseases that were detected during the given hadm_id with respect to order.
+
+        Args:
+            subject_transactions (pd.DataFrame): subject's datected disease.
+            hadm_id (int): current hadm id.
+
+        Returns:
+            list[str]: list of unique detected diseases.
+        """
         transaction: pd.DataFrame = subject_transactions[
             subject_transactions["hadm_id"] == hadm_id
         ]
@@ -205,6 +221,19 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         lower_bound: str,
         upper_bound: str,
     ) -> pd.DataFrame:
+        """
+        Removes some codes and cuts icd-10 code to the first code_length symbols.
+
+        Args:
+            data (pd.DataFrame): data you want to preprocess.
+            target_column (str): column containing icd-10 code.
+            code_length (int): maximum length of icd code.
+            lower_bound (str): lower bound of allowed codes (including)
+            upper_bound (str): upper bound of allowed codes (including)
+
+        Returns:
+            pd.DataFrame: preprocessed dataframe.
+        """
         code_cutter: utils.CodeCutter = utils.CodeCutter(code_length)
 
         data[target_column] = pd.Series(data[target_column], dtype="string")
@@ -219,6 +248,9 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
 @preprocessor
 class SecretDatasetPreprocessorFactory(PreprocessorFactory):
+    """
+    Preprocessor for the secret dataset.
+    """
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -267,7 +299,7 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
                 dates_of_service: list[int] = [date for date in unique_dates_of_service]
 
                 if len(dates_of_service) == 1:
-                    # оcтавляем для обучения всегда
+                    # always send to training
                     unique_tokens = self._get_unique_tokens(
                         member_transactions, dates_of_service[0]
                     )
@@ -294,7 +326,7 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
                             )
 
                     if to_validation:
-                        # отправляем последние 2 транзакции в валидацию
+                        # send the last 2 transactions to validation
                         dates_of_service_subset = dates_of_service[-2:]
                         for date_index in range(len(dates_of_service_subset)):
                             unique_tokens = self._get_unique_tokens(
@@ -311,7 +343,7 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
                                     " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
                                 )
                     else:
-                        # отправляем последние 2 транзакции в обучение
+                        # send the last 2 transactions to training
                         dates_of_service_subset = dates_of_service[-2:]
                         for date_index in range(len(dates_of_service_subset)):
                             unique_tokens = self._get_unique_tokens(
