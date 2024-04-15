@@ -52,9 +52,10 @@ development = [
 ]
 
 [project.scripts]
-train = "embeddings4disease.cli.training:train"
-validate = "embeddings4disease.cli.validation:validate"
-preprocess = "embeddings4disease.cli.preprocessing:preprocess"
+preprocess = "embeddings4disease.cli.preprocess:preprocess"
+train_backbone = "embeddings4disease.cli.train_backbone:train"
+validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
+validate_baseline = "embeddings4disease.cli.validate_baseline:validate"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
