@@ -79,6 +79,10 @@ class MetricComputerCallback(TrainerCallback):
         self.use_wandb: bool = use_wandb
         self.save_plot: bool = save_plot
 
+        if self.save_plot:
+            sns.set_style("white")
+            sns.color_palette("bright")
+
         for metric, usage in self.use_metrics.items():
             if usage:
                 self.__initialize_metric_storage(metric)
@@ -175,9 +179,6 @@ class MetricComputerCallback(TrainerCallback):
                     self.__dump_logs(metric_name, logs)
 
                     if self.save_plot:
-                        sns.set_style("white")
-                        sns.color_palette("bright")
-
                         x_ticks: list[int] = [
                             int(float(value)) for value in list(logs.keys())
                         ]
@@ -226,6 +227,10 @@ class SaveLossHistoryCallback(TrainerCallback):
 
         self.save_plot: bool = save_plot
 
+        if self.save_plot:
+            sns.set_style("white")
+            sns.color_palette("bright")
+
     def on_evaluate(  # type: ignore
         self,
         args: TrainingArguments,
@@ -250,9 +255,6 @@ class SaveLossHistoryCallback(TrainerCallback):
             json.dump(history, f)
 
         if self.save_plot:
-            sns.set_style("white")
-            sns.color_palette("bright")
-
             loss_train_history = [record["loss"] for record in history if "loss" in record]
             loss_val_history = [
                 record["eval_loss"] for record in history if "eval_loss" in record
