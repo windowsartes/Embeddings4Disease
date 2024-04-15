@@ -1,5 +1,4 @@
 import json
-import glob
 import pathlib
 import warnings
 
@@ -176,6 +175,9 @@ class MetricComputerCallback(TrainerCallback):
                     self.__dump_logs(metric_name, logs)
 
                     if self.save_plot:
+                        sns.set_style("white")
+                        sns.color_palette("bright")
+
                         x_ticks: list[int] = [
                             int(float(value)) for value in list(logs.keys())
                         ]
@@ -248,6 +250,9 @@ class SaveLossHistoryCallback(TrainerCallback):
             json.dump(history, f)
 
         if self.save_plot:
+            sns.set_style("white")
+            sns.color_palette("bright")
+
             loss_train_history = [record["loss"] for record in history if "loss" in record]
             loss_val_history = [
                 record["eval_loss"] for record in history if "eval_loss" in record
