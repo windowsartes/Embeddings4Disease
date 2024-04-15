@@ -1,0 +1,11 @@
+path_to_training_file: data/preprocessed/train_transactions_single.txt
+path_to_validation_file: data/preprocessed/val_transactions_single.txt
+top_k: 10
+metrics: 
+ reciprocal_rank: true
+ simplified_dcg: true
+ precision: false
+ recall: false
+ f_score: false
+ hits: true
+ confidence: true
