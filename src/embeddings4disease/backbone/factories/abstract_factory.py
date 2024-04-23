@@ -2,7 +2,7 @@ import os
 import typing as tp
 import yaml
 
-from embeddings4disease.factories import architecture_factory
+from embeddings4disease.backbone.factories import architecture_factory
 
 
 class AbstractFactory:
