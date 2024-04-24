@@ -154,6 +154,7 @@ warn_return_any = true
 warn_unreachable = true
 allow_untyped_globals = false
 allow_redefinition = false
+exclude = "./tests/"
 
 [[tool.mypy.overrides]]
 module = [
