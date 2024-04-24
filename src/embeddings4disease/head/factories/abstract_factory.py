@@ -11,4 +11,4 @@ class AbstractFactory:
         with open(os.path.abspath(config_path)) as f:
             config: dict[str, tp.Any] = yaml.safe_load(f)
 
-        return architecture_factory.CLASS_REGISTER[config["model"]["type"]](config)
+        return architecture_factory.HEAD_REGISTER[config["model"]["type"]](config)
