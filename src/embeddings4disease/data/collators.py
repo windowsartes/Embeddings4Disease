@@ -52,7 +52,7 @@ class MaskingCollator:
         return inputs, answers
 
 
-class MultiLabelCollator:
+class MultiLabelHeadCollator:
     """
     This class is used as a collate_fn by the DataLoader during MultiLabelHead training.
     It will pad, truncate and stack source sequences. Targets one-hot vectors also will be stacked at the batch.
