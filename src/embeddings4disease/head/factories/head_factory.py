@@ -3,7 +3,7 @@ import typing as tp
 from abc import ABC, abstractmethod
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
@@ -64,7 +64,7 @@ class MultiLabelHeadFactory(HeadFactory):
 
         model = multilabel_head.MultiLabelHead(backbone, tokenizer.vocab_size,
                                                **self.config["model"]["head"]["params"]
-                                              )     
+                                              )
 
         return model
 
@@ -99,15 +99,3 @@ class MultiLabelHeadFactory(HeadFactory):
 
     def create_trainer_argument(self):
         return None
-
-
-'''
-import yaml
-with open(os.path.abspath("config_examples/head/train/config_multilabel.yaml")) as f:
-    config: dict[str, tp.Any] = yaml.safe_load(f)
-
-head = MultiLabelHeadFactory(config)
-
-model = head.create_model()
-print(type(model.backbone))
-'''

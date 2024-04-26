@@ -77,14 +77,14 @@ class MultiLabelHead(nn.Module):
         '''
         self.input_block: LinearBlock = LinearBlock(input_size, hidden_sizes[0])
         '''
-        
+
         self.head = nn.Sequential(OrderedDict([
             (
                 "input_block",
                 LinearBlock(input_size, hidden_sizes[0])
             ),
             (
-                "hidden_blocks", 
+                "hidden_blocks",
                 nn.Sequential(OrderedDict([
                     *[(f"hidden_block_{i}",
                         LinearBlock(
