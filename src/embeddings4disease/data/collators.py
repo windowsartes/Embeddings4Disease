@@ -8,7 +8,6 @@ class MaskingCollator:
     It just takes a string with tokens, [MASK]ing last token, applyes tokenizer to the output then can be
     passed throw BERT-like model; also it returns true token that was [MASK]ed so you can validate your model.
 
-    In __init__ this collator receives following arguments:
     Args:
         tokenizer (PreTrainedTokenizer | PreTrainedTokenizerFast): tokenizer you want to use on your data.
         seq_len (int): maximum length in tokens one input sequence can be.
@@ -20,16 +19,13 @@ class MaskingCollator:
         self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
         self.seq_len: int = seq_len
 
-    def __call__(
-        self, sequence_batch: list[str]
-    ) -> tuple[dict[str, torch.Tensor], list[str]]:
+    def __call__(self, sequence_batch: list[str]) -> tuple[dict[str, torch.Tensor], list[str]]:
         """
         This method will be hiddenly used by a dataloder if an instance of this class will be used as a
         collate_fn function. It receives a list of string (with tokens separated by space), masked the
         last token and applyes the tokenizer.
 
         Args:
-            tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast: model's tokenizer you want to use.
             sequence_batch (list[str]): list of string with tokens separated by space.
 
         Returns:
@@ -54,3 +50,48 @@ class MaskingCollator:
         )
 
         return inputs, answers
+
+
+class MultiLabelHeadCollator:
+    """
+    This class is used as a collate_fn by the DataLoader during MultiLabelHead training.
+    It will pad, truncate and stack source sequences. Targets one-hot vectors also will be stacked at the batch.
+
+    Args:
+        tokenizer (PreTrainedTokenizer | PreTrainedTokenizerFast): tokenizer you want to use on your data.
+        seq_len (int): maximum length in tokens one input sequence can be.
+    """
+    def __init__(
+        self, tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        seq_len: int,
+    ):
+        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self.seq_len: int = seq_len
+
+    def __call__(self, sequence_batch: list[tuple[str, torch.LongTensor]]) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
+        """
+        This method will be hiddenly used by a dataloder if an instance of this class will be used as a
+        collate_fn function. It receives a list of string (with tokens separated by space), masked the
+        last token and applyes the tokenizer.
+
+        Args:
+            sequence_batch (list[tuple[str, torch.LongTensor]]): list of tuples with source sequences
+            and target tokens as a one-hot vector.
+
+        Returns:
+            tuple[dict[str, torch.Tensor], torch.Tensor]: preprocessed by the tokenizer source strings
+            and stacked in the batch targets.
+        """
+        source_sequences_lst: list[str] = []
+        targets: list[torch.Tensor] = []
+
+        for i in range(len(sequence_batch)):
+            source_sequence, target = sequence_batch[i]
+            source_sequences_lst.append(source_sequence)
+            targets.append(target)
+
+        source_sequences: dict[str, torch.Tensor] = self.tokenizer(
+            source_sequences_lst, padding="longest", return_tensors="pt",
+            truncation=True, max_length=self.seq_len)
+
+        return source_sequences, torch.stack(targets, dim=0)

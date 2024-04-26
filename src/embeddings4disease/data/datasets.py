@@ -215,8 +215,8 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         )
 
                     # add special tokens
-                    tokens_a = list(dict.fromkeys(tokens_a))[:self.seq_len]
-                    tokens_b = list(dict.fromkeys(tokens_b))[:self.seq_len]
+                    tokens_a = list(dict.fromkeys(tokens_a))[: self.seq_len]
+                    tokens_b = list(dict.fromkeys(tokens_b))[: self.seq_len]
 
                     input_ids: list[int] = (
                         self.tokenizer.build_inputs_with_special_tokens(
@@ -252,3 +252,88 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         return self.examples[index]
+
+
+class MultiLabelHeadDataset(Dataset):
+    """
+    This dataset is used to train multilabel head model.
+
+    Args:
+        path_to_data (str): path to data you want to use. Must be in seq-to-seq format:
+        sorce and target sequences at the same line separated by comma.
+        tokenizer (PreTrainedTokenizer | PreTrainedTokenizerFast): tokenizer you want to use.
+        predict_unk (bool): can <UNK> presents in the target vector or not.
+
+    """
+
+    def __init__(
+        self,
+        path_to_data: pathlib.Path | str,
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        predict_unk: bool = False,
+    ):
+        super().__init__()
+
+        with open(path_to_data, "r") as input_file:
+            self.data = input_file.readlines()
+
+        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+
+        # technical tokens are also included here, but if we remove them,
+        # we'll have to change the indices after the model predictor,
+        # and this will be quite inconvenient, but overall ok.
+        self.num_classes: int = tokenizer.vocab_size
+
+        # The idea is that UNK can be understood as some kind of disease that is not in the dictionary.
+        # Then it may be logical to predict it.
+        self.predict_unk: bool = predict_unk
+
+    def __len__(self) -> int:
+        """
+        Returns lengths of stored dataset.
+
+        Returns:
+            int: length of the dataset.
+        """
+        return len(self.data)
+
+    def __getitem__(self, index: int) -> tuple[str, torch.Tensor]:
+        """
+        This method will return you a tuple with source sequence as a string and
+        target tokens indexes as a torch.Tensor one-hot vector.
+
+        Args:
+            index (int): index of a pair of transactions.
+
+        Returns:
+            tuple[str, torch.LongTensor]: sorce seq. as a string, new target seq. tokens as a one-hot vector.
+        """
+        source_seq_str, target_seq_str = self.data[index].split(",")
+
+        source_seq: list[str] = self.tokenizer.tokenize(source_seq_str)
+        target_seq: list[str] = self.tokenizer.tokenize(target_seq_str)
+
+        if self.predict_unk:
+            target_tokens: str = " ".join(
+                [token for token in target_seq if token not in source_seq]
+            )
+        else:
+            target_tokens = " ".join([
+                    token
+                    for token in target_seq
+                    if token not in source_seq
+                    and token in self.tokenizer.get_vocab()
+                    and token not in self.tokenizer.special_tokens_map
+                ]
+            )
+
+        target_tokens_codes: list[int] = self.tokenizer.encode(target_tokens)[1:-1]
+
+        target_tokens_codes_tensor: torch.Tensor = torch.tensor(target_tokens_codes).long()
+
+        target_one_hot: torch.Tensor = torch.nn.functional.one_hot(
+            target_tokens_codes_tensor, num_classes=self.num_classes
+        )
+        target_one_hot = target_one_hot.sum(dim=0)
+
+        return source_seq_str, target_one_hot

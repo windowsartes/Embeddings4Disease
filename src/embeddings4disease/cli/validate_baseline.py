@@ -14,7 +14,7 @@ def validate(config_path: str) -> None:
         config: dict[str, tp.Any] = yaml.safe_load(f)
 
     baseline = metrics.Baseline(config)
-    
+
     print(baseline.get_metrics_value())
 
 if __name__ == "__main__":
