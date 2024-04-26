@@ -34,7 +34,7 @@ from embeddings4disease.metrics import metrics
 from embeddings4disease.utils import utils
 
 
-class ArchitectureFactory(ABC):
+class BackboneFactory(ABC):
     """
     Base class for model creation. It's usually automatically created by the AbstractFactory.
 
@@ -275,10 +275,10 @@ class ArchitectureFactory(ABC):
             trainer.save_model(self.storage_path.joinpath("saved_model"))
 
 
-CLASS_REGISTER: dict[str, tp.Type[ArchitectureFactory]] = {}
+BACKBONE_REGISTER: dict[str, tp.Type[BackboneFactory]] = {}
 
 
-def architecture(cls: tp.Type[ArchitectureFactory]) -> tp.Type[ArchitectureFactory]:
+def backbone(cls: tp.Type[BackboneFactory]) -> tp.Type[BackboneFactory]:
     """
     This decorator is used to register an architucture so Abstract Factory can create a proper model
     without any ifs inside its body.
@@ -289,12 +289,12 @@ def architecture(cls: tp.Type[ArchitectureFactory]) -> tp.Type[ArchitectureFacto
     Returns:
         tp.Type[ArchitectureFactory]: registered class.
     """
-    CLASS_REGISTER[cls.__name__[:-7]] = cls
+    BACKBONE_REGISTER[cls.__name__[:-7]] = cls
     return cls
 
 
-@architecture
-class BERTFactory(ArchitectureFactory):
+@backbone
+class BERTFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -349,8 +349,8 @@ class BERTFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class ConvBERTFactory(ArchitectureFactory):
+@backbone
+class ConvBERTFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -407,8 +407,8 @@ class ConvBERTFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class DeBERTaFactory(ArchitectureFactory):
+@backbone
+class DeBERTaFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -472,8 +472,8 @@ class DeBERTaFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class FNetFactory(ArchitectureFactory):
+@backbone
+class FNetFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -535,8 +535,8 @@ class FNetFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class FunnelTransformerFactory(ArchitectureFactory):
+@backbone
+class FunnelTransformerFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -592,8 +592,8 @@ class FunnelTransformerFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class MobileBERTFactory(ArchitectureFactory):
+@backbone
+class MobileBERTFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -651,8 +651,8 @@ class MobileBERTFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class RoBERTaFactory(ArchitectureFactory):
+@backbone
+class RoBERTaFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -716,8 +716,8 @@ class RoBERTaFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class RoFormerFactory(ArchitectureFactory):
+@backbone
+class RoFormerFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -774,8 +774,8 @@ class RoFormerFactory(ArchitectureFactory):
         return model
 
 
-@architecture
-class XLMRoBERTaFactory(ArchitectureFactory):
+@backbone
+class XLMRoBERTaFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
