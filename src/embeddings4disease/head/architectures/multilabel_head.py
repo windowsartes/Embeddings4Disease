@@ -35,7 +35,7 @@ class MultiLabelHead(nn.Module):
                  n_last_layers: int = 4,
                  aggregation: str = "concatenation",
                  mode: str = "transfer learning",
-                 hidden_sizes: tuple[int, ...] = (1024, 512, 256,),
+                 hidden_sizes: tuple[int, ...] | list[int] = (1024, 512, 256,),
                  hidden_use_dropout: bool = True,
                  hidden_dropout_rate: float = 0.1,
                  hidden_use_normalization: bool = True,
@@ -74,8 +74,37 @@ class MultiLabelHead(nn.Module):
         elif self.aggregation == "addition":
             input_size = embedding_size
 
+        '''
         self.input_block: LinearBlock = LinearBlock(input_size, hidden_sizes[0])
+        '''
+        
+        self.head = nn.Sequential(OrderedDict([
+            (
+                "input_block",
+                LinearBlock(input_size, hidden_sizes[0])
+            ),
+            (
+                "hidden_blocks", 
+                nn.Sequential(OrderedDict([
+                    *[(f"hidden_block_{i}",
+                        LinearBlock(
+                            hidden_sizes[i],
+                            hidden_sizes[i+1],
+                            hidden_use_dropout,
+                            hidden_dropout_rate,
+                            hidden_use_normalization
+                        )
+                    )
+                    for i in range(len(hidden_sizes) - 1)]
+                ])),
+            ),
+            (
+                "classification_head",
+                nn.Linear(hidden_sizes[-1], n_classes),
+            ),
+        ]))
 
+        '''
         self.hidden_blocks: nn.Sequential = nn.Sequential(OrderedDict([
             *[(f"hidden_block_{i}",
                LinearBlock(
@@ -90,6 +119,7 @@ class MultiLabelHead(nn.Module):
         ]))
 
         self.classification_head: nn.Linear = nn.Linear(hidden_sizes[-1], n_classes)
+        '''
 
     def forward(self, tokenizer_output: dict[str, torch.Tensor]) -> torch.Tensor:
         if self.mode == "transfer learning":
@@ -109,4 +139,5 @@ class MultiLabelHead(nn.Module):
                                      dim=-1
                                     ).sum(dim=-1)[:, 0, :]
 
-        return self.classification_head(self.hidden_blocks(self.input_block(embeddings)))  # type: ignore
+        # return self.classification_head(self.hidden_blocks(self.input_block(embeddings)))  # type: ignore
+        return self.head(embeddings)  # type: ignore

@@ -57,7 +57,7 @@ def test_multilabel_head_requires_grad(mode: str, requires_grad: bool):
     for param in multilabel_head_model.backbone.parameters():
         assert param.requires_grad == requires_grad
 
-    for param in multilabel_head_model.classification_head.parameters():
+    for param in multilabel_head_model.head.parameters():
         assert param.requires_grad == True
 
 
@@ -88,7 +88,7 @@ def test_multilabel_head_hiddens_dropout_usage(use_dropout: bool):
     multilabel_head_model = MultiLabelHead(backbone, tokenizer.vocab_size,
                                            hidden_use_dropout=use_dropout)
 
-    for linear_block in multilabel_head_model.hidden_blocks:
+    for linear_block in multilabel_head_model.head.hidden_blocks:
         assert isinstance(linear_block.block.dropout, nn.Dropout1d) == use_dropout
 
 
@@ -104,7 +104,7 @@ def test_multilabel_head_hiddens_normalization_usage(use_normalization: bool):
     multilabel_head_model = MultiLabelHead(backbone, tokenizer.vocab_size,
                                            hidden_use_normalization=use_normalization)
 
-    for linear_block in multilabel_head_model.hidden_blocks:
+    for linear_block in multilabel_head_model.head.hidden_blocks:
         assert isinstance(linear_block.block.normalization, nn.BatchNorm1d) == use_normalization
 
 
@@ -123,7 +123,7 @@ def test_multilabel_head_hidden_sizes(hidden_sizes: tuple[int]):
     multilabel_head_model = MultiLabelHead(backbone, tokenizer.vocab_size,
                                            hidden_sizes=hidden_sizes)
 
-    assert len(multilabel_head_model.hidden_blocks) == len(hidden_sizes) - 1
+    assert len(multilabel_head_model.head.hidden_blocks) == len(hidden_sizes) - 1
 
 
 def test_multilabel_head_wrong_mode():
