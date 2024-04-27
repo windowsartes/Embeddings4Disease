@@ -4,14 +4,13 @@ model:
   from_huggingface: true
   path_to_saved_model: windowsartes/bert
  head:
-  params:
-   n_last_layers: 4
-   aggregation: "concatenation"
-   mode: "transfer learning"
-   hidden_sizes: [1024, 512, 256]
-   hidden_use_dropout: True
-   hidden_dropout_rate: 0.1
-   hidden_use_normalization: True
+  n_last_layers: 4
+  aggregation: "concatenation"
+  mode: "transfer learning"
+  hidden_sizes: [1024, 512, 256]
+  hidden_use_dropout: True
+  hidden_dropout_rate: 0.1
+  hidden_use_normalization: True
 tokenizer:
  from_huggingface: true
  path_to_saved_tokenizer: windowsartes/bert_tokenizer
@@ -19,6 +18,16 @@ hyperparameters:
  batch_size: 8
  seq_len: 24
 training:
+ device: cuda:0
  path_to_data: data/preprocessed/train_transactions_pair.txt
+ n_epochs: 3
+ n_warmup_epochs: 1
+ optimizer_parameters:
+  learning_rate: 0.001
+  backbone_learning_rate: null
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  weight_decay: 0.01
 validation:
  path_to_data: data/preprocessed/val_transactions_pair.txt
+ period: 10
