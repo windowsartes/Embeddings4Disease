@@ -10,6 +10,7 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 from embeddings4disease.head.architectures import multilabel_head
 from embeddings4disease.data.datasets import MultiLabelHeadDataset
 from embeddings4disease.data.collators import MultiLabelHeadCollator
+from embeddings4disease.trainer import TrainingArgs
 
 
 class HeadFactory(ABC):
@@ -29,11 +30,11 @@ class HeadFactory(ABC):
         pass
 
     @abstractmethod
-    def create_callbacks(self):
+    def create_callbacks(self) -> list[tp.Any]:  # just for now
         pass
 
     @abstractmethod
-    def create_trainer_argument(self):
+    def create_training_args(self) -> TrainingArgs:
         pass
 
 
@@ -63,7 +64,7 @@ class MultiLabelHeadFactory(HeadFactory):
             )
 
         model = multilabel_head.MultiLabelHead(backbone, tokenizer.vocab_size,
-                                               **self.config["model"]["head"]["params"]
+                                               **self.config["model"]["head"]
                                               )
 
         return model
@@ -92,10 +93,20 @@ class MultiLabelHeadFactory(HeadFactory):
             dataset,
             batch_size=self.config["hyperparameters"]["batch_size"],
             collate_fn=collate_fn,
+            # shuffle=True if mode=="training" else False,
+            shuffle=True,
+            drop_last=True,
         )
 
-    def create_callbacks(self):
+    def create_callbacks(self) -> list[tp.Any]:
         return []
 
-    def create_trainer_argument(self):
-        return None
+    def create_training_args(self) -> TrainingArgs:
+        return TrainingArgs(
+            mode=self.config["model"]["head"]["mode"],
+            n_epochs=self.config["training"]["n_epochs"],
+            n_warmup_epochs=self.config["training"]["n_warmup_epochs"],
+            device=torch.device(self.config["training"]["device"]),
+            criterion=torch.nn.BCEWithLogitsLoss,
+            **self.config["training"]["optimizer_parameters"],
+        )
