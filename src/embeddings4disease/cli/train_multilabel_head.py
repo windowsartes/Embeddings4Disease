@@ -9,6 +9,8 @@ from embeddings4disease.trainer import Trainer
 def train(config_path: str) -> None:
     factory = abstract_factory.AbstractFactory().create(config_path)
 
+    factory.initialize()
+
     model = factory.create_model()
     training_args = factory.create_training_args()
 
