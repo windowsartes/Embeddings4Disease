@@ -28,9 +28,9 @@ except ImportError:
 else:
     wandb_installed = True
 
-from embeddings4disease.callbacks import callbacks
+from embeddings4disease.callbacks import hf_callbacks
 from embeddings4disease.data import collators, datasets
-from embeddings4disease.metrics import metrics
+from embeddings4disease.metrics import backbone_metrics
 from embeddings4disease.utils import utils
 
 
@@ -165,7 +165,7 @@ class BackboneFactory(ABC):
             )
 
             used_callbacks.append(
-                callbacks.MetricComputerCallback(
+                hf_callbacks.MetricComputerCallback(
                     path_to_data=os.path.abspath(
                         self.config["validation"]["path_to_data"]
                     ),
@@ -183,7 +183,7 @@ class BackboneFactory(ABC):
             )
 
         used_callbacks.append(
-            callbacks.SaveLossHistoryCallback(
+            hf_callbacks.SaveLossHistoryCallback(
                 loss_storage_dir=self.storage_path.joinpath("loss"),
                 save_plot=self.config["validation"]["save_graphs"],
             )
@@ -224,7 +224,7 @@ class BackboneFactory(ABC):
 
         return training_args
 
-    def create_metric_computer(self) -> tuple[metrics.MLMMetricComputer, dict[str, bool]]:
+    def create_metric_computer(self) -> tuple[backbone_metrics.MLMMetricComputer, dict[str, bool]]:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
             self.create_tokenizer()
         )
@@ -240,7 +240,7 @@ class BackboneFactory(ABC):
             ),
         )
 
-        metric_computer: metrics.MLMMetricComputer = metrics.MLMMetricComputer(
+        metric_computer: backbone_metrics.MLMMetricComputer = backbone_metrics.MLMMetricComputer(
             tokenizer, self.config["validation"]["top_k"], dataloader
         )
 
