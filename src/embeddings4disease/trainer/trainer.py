@@ -1,3 +1,6 @@
+import os
+import platform
+
 import numpy as np
 import pytorch_warmup as warmup
 import torch
@@ -9,6 +12,7 @@ from tqdm import tqdm
 
 from embeddings4disease.trainer.training_args import TrainingArgs
 from embeddings4disease.trainer.training_state import TrainingState
+from embeddings4disease.callbacks import custom_callbacks
 
 
 class Trainer:
@@ -17,7 +21,7 @@ class Trainer:
         model: nn.Module,
         train_dataloader: DataLoader,
         eval_dataloader: DataLoader,
-        callbacks: list[tp.Any],  # just for now
+        callbacks: list[custom_callbacks.CustomCallback],
         args: TrainingArgs,
     ):
         self.model: nn.Module = model
@@ -25,7 +29,7 @@ class Trainer:
         self.train_dataloader: DataLoader = train_dataloader
         self.eval_dataloader: DataLoader = eval_dataloader
 
-        self.callbacks = callbacks
+        self.callbacks: list[custom_callbacks.CustomCallback] = callbacks
 
         self.training_args: TrainingArgs = args
 
@@ -79,22 +83,35 @@ class Trainer:
 
         criterion: torch.nn.modules.loss._Loss = self.training_args.criterion()
 
-        for epoch in range(self.training_args.n_epochs):
-            average_train_loss = self._train_step(
-                                                 optimizer=optimizer,
-                                                 scheduler=scheduler,
-                                                 warmup_scheduler=warmup_scheduler,
-                                                 dataloader=self.train_dataloader,
-                                                 criterion=criterion,
-                                                )
+        progress_bar = tqdm(range(self.training_args.n_epochs))
+        for epoch in progress_bar:
+            progress_bar.set_description(f"epoch #{epoch}")
+
+            average_train_loss: float = self._train_step(
+                                                         optimizer=optimizer,
+                                                         scheduler=scheduler,
+                                                         warmup_scheduler=warmup_scheduler,
+                                                         dataloader=self.train_dataloader,
+                                                         criterion=criterion,
+                                                        )
             self.training_state.train_loss_history[epoch] = average_train_loss
 
-            average_eval_loss = self._eval_step(
-                                               dataloader=self.eval_dataloader,
-                                               criterion=criterion,
-                                              )
+            average_eval_loss: float = self._eval_step(
+                                                       dataloader=self.eval_dataloader,
+                                                       criterion=criterion,
+                                                      )
 
             self.training_state.eval_loss_history[epoch] = average_eval_loss
+
+            for callback in self.callbacks:
+                callback.on_evaluate(self.training_state, self.training_args, self.model)
+
+            for callback in self.callbacks:
+                callback.on_save(self.training_state, self.model, optimizer)
+
+            self.training_state.epoch += 1
+
+            os.system("cls" if platform.system() == "Windows" else "clear")
 
     def _train_step(self,
                     optimizer: optim.Optimizer,
@@ -110,7 +127,10 @@ class Trainer:
         device: torch.device = self.training_args.device
         n_warmup_epochs: int = self.training_args.n_warmup_epochs
 
-        for input_tensor, target_tensor in tqdm(dataloader):
+        progress_bar = tqdm(dataloader)
+        for input_tensor, target_tensor in progress_bar:
+            progress_bar.set_description("Training step")
+
             input_tensor = input_tensor.to(device)
             target_tensor = target_tensor.to(device)
 
@@ -129,6 +149,8 @@ class Trainer:
 
             losses.append(loss.item())
 
+        progress_bar.close()
+
         return float(np.mean(losses))
 
     @torch.no_grad()
@@ -142,7 +164,10 @@ class Trainer:
 
         device: torch.device = self.training_args.device
 
-        for input_tensor, target_tensor in tqdm(dataloader):
+        progress_bar = tqdm(dataloader)
+        for input_tensor, target_tensor in progress_bar:
+            progress_bar.set_description("Evaluation step")
+
             input_tensor = input_tensor.to(device)
             target_tensor = target_tensor.to(device)
 
@@ -151,5 +176,6 @@ class Trainer:
             loss: torch.Tensor = criterion(predicted_tensor, target_tensor)
 
             losses.append(loss.item())
+        progress_bar.close()
 
         return float(np.mean(losses))
