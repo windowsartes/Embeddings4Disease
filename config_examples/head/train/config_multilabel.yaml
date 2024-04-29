@@ -20,8 +20,8 @@ hyperparameters:
 training:
  device: cuda:0
  path_to_data: data/preprocessed/train_transactions_pair.txt
- n_epochs: 3
- n_warmup_epochs: 100
+ n_epochs: 10
+ n_warmup_epochs: 5
  optimizer_parameters:
   learning_rate: 0.001
   backbone_learning_rate: null
