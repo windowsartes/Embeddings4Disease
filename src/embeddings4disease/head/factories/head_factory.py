@@ -1,20 +1,29 @@
 import os
+import pathlib
 import typing as tp
 from abc import ABC, abstractmethod
 
 import torch
+from datetime import datetime
 from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
+from embeddings4disease.callbacks import custom_callbacks
 from embeddings4disease.head.architectures import multilabel_head
 from embeddings4disease.data.datasets import MultiLabelHeadDataset
 from embeddings4disease.data.collators import MultiLabelHeadCollator
+from embeddings4disease.trainer import TrainingArgs
+from embeddings4disease.utils import utils
 
 
 class HeadFactory(ABC):
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
+
+    @abstractmethod
+    def initialize(self) -> None:
+        pass
 
     @abstractmethod
     def create_model(self) -> torch.nn.Module:
@@ -29,11 +38,11 @@ class HeadFactory(ABC):
         pass
 
     @abstractmethod
-    def create_callbacks(self):
+    def create_callbacks(self) -> list[custom_callbacks.CustomCallback]:
         pass
 
     @abstractmethod
-    def create_trainer_argument(self):
+    def create_training_args(self) -> TrainingArgs:
         pass
 
 
@@ -50,6 +59,9 @@ class MultiLabelHeadFactory(HeadFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
+    def initialize(self) -> None:
+        self._create_storage()
+
     def create_model(self) -> multilabel_head.MultiLabelHead:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
 
@@ -63,7 +75,7 @@ class MultiLabelHeadFactory(HeadFactory):
             )
 
         model = multilabel_head.MultiLabelHead(backbone, tokenizer.vocab_size,
-                                               **self.config["model"]["head"]["params"]
+                                               **self.config["model"]["head"]
                                               )
 
         return model
@@ -92,10 +104,66 @@ class MultiLabelHeadFactory(HeadFactory):
             dataset,
             batch_size=self.config["hyperparameters"]["batch_size"],
             collate_fn=collate_fn,
+            # shuffle=True if mode=="training" else False,
+            shuffle=True,
+            drop_last=True,
         )
 
-    def create_callbacks(self):
-        return []
+    def create_callbacks(self) -> list[custom_callbacks.CustomCallback]:
+        used_callbacks: list[custom_callbacks.CustomCallback] = []
 
-    def create_trainer_argument(self):
-        return None
+        compute_metrics: bool = False
+        for value in self.config["validation"]["metrics"].values():
+            if value:
+                compute_metrics = value
+                break
+
+        if compute_metrics:
+            device: torch.device = torch.device(
+                self.config["training"]["device"]
+                if torch.cuda.is_available()
+                else "cpu"
+            )
+
+            used_callbacks.append(
+                custom_callbacks.MetricComputerCallback(
+                    metrics_storage_dir=self.storage_path.joinpath("metrics"),
+                    use_metrics=self.config["validation"]["metrics"],
+                    dataloader=self.create_dataloader("validation"),
+                    device=device,
+                    period=self.config["validation"]["period"],
+                    threshold=self.config["validation"]["threshold"],
+                    save_plot=True,
+                )
+            )
+
+        used_callbacks.append(custom_callbacks.SaveLossHistoryCallback(self.storage_path.joinpath("loss"), True))
+
+        used_callbacks.append(custom_callbacks.CheckpointCallback(self.storage_path.joinpath("checkpoint")))
+        used_callbacks.append(custom_callbacks.SaveBestModelCallback(self.storage_path.joinpath("best_model")))
+
+        return used_callbacks
+
+    def create_training_args(self) -> TrainingArgs:
+        return TrainingArgs(
+            mode=self.config["model"]["head"]["mode"],
+            n_epochs=self.config["training"]["n_epochs"],
+            n_warmup_epochs=self.config["training"]["n_warmup_epochs"],
+            device=torch.device(self.config["training"]["device"]),
+            criterion=torch.nn.BCEWithLogitsLoss,
+            **self.config["training"]["optimizer_parameters"],
+        )
+
+    def _create_storage(self) -> None:
+        """
+        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
+        """
+        working_dir: pathlib.Path = pathlib.Path(utils.get_cwd())
+
+        now = datetime.now()
+        data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
+
+        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
+        utils.create_dir(storage_path)
+
+        self.storage_path: pathlib.Path = storage_path

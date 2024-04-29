@@ -4,7 +4,7 @@ import yaml
 
 import click
 
-from embeddings4disease.metrics import metrics
+from embeddings4disease.metrics import backbone_metrics
 
 
 @click.command()
@@ -13,7 +13,7 @@ def validate(config_path: str) -> None:
     with open(os.path.abspath(config_path)) as f:
         config: dict[str, tp.Any] = yaml.safe_load(f)
 
-    baseline = metrics.Baseline(config)
+    baseline = backbone_metrics.Baseline(config)
 
     print(baseline.get_metrics_value())
 

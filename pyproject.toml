@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "embeddings4disease"
-version = "0.0.1"
+version = "0.2.0"
 
 authors = [
   {name = "Lipkovich Mikhail"},
@@ -26,6 +26,7 @@ dependencies = [
   "click",
   "matplotlib",
   "seaborn",
+  "pytorch-warmup=0.1.1",
   "PyYAML >= 6.0.1",
   "torch",
   "transformers >= 4.38.2",
@@ -54,6 +55,7 @@ development = [
 [project.scripts]
 preprocess = "embeddings4disease.cli.preprocess:preprocess"
 train_backbone = "embeddings4disease.cli.train_backbone:train"
+train_miltilabel_head = "embeddings4disease.cli.train_multilabel_head:train"
 validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
 validate_baseline = "embeddings4disease.cli.validate_baseline:validate"
 
@@ -76,6 +78,9 @@ exclude = [
     "dist",
     "node_modules",
     "site-packages",
+    "./*/__init__.py",
+    "./*/*/__init__.py",
+    "./*/*/*/__init__.py",
 ]
 
 # Same as Black.
@@ -155,9 +160,14 @@ warn_unreachable = true
 allow_untyped_globals = false
 allow_redefinition = false
 exclude = "./tests/"
+plugins = [
+  "numpy.typing.mypy_plugin",
+]
+
 
 [[tool.mypy.overrides]]
 module = [
     "transformers",
+    "pytorch_warmup",
 ]
 ignore_missing_imports = true

@@ -24,7 +24,7 @@ else:
 
 from embeddings4disease.data.datasets import CustomLineByLineDataset
 from embeddings4disease.data.collators import MaskingCollator
-from embeddings4disease.metrics.metrics import MLMMetricComputer
+from embeddings4disease.metrics.backbone_metrics import MLMMetricComputer
 from embeddings4disease.utils import utils
 
 

@@ -334,6 +334,6 @@ class MultiLabelHeadDataset(Dataset):
         target_one_hot: torch.Tensor = torch.nn.functional.one_hot(
             target_tokens_codes_tensor, num_classes=self.num_classes
         )
-        target_one_hot = target_one_hot.sum(dim=0)
+        target_one_hot = target_one_hot.sum(dim=0).float()
 
         return source_seq_str, target_one_hot

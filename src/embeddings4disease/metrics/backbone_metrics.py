@@ -130,10 +130,10 @@ class MetricComputerInterface(ABC):
         Returns:
             float: f-score's value.
         """
-        eps = 1e-9
+        eps: float = 1e-9
 
-        precision = MLMMetricComputer._compute_precision(answer, predicted_tokens, tokens_probabilities)
-        recall = MLMMetricComputer._compute_recall(answer, predicted_tokens, tokens_probabilities)
+        precision: float = MetricComputerInterface._compute_precision(answer, predicted_tokens, tokens_probabilities)
+        recall: float = MetricComputerInterface._compute_recall(answer, predicted_tokens, tokens_probabilities)
 
         return ((1 + beta**2) * precision * recall) / ((beta**2) * precision + recall + eps)
 
@@ -297,7 +297,7 @@ class Baseline(MetricComputerInterface):
                     counter[token] += 1
 
         number_of_tokens: int = sum(counter.values())
-        self._config = config
+        self._config: dict[str, tp.Any] = config
         self._counter: Counter[str] = Counter(dict(sorted(counter.items(), key=lambda item: item[1], reverse=True)))
         self._top_k_predictions: dict[str, float] = {key: value/number_of_tokens for key, value in self._counter.most_common(config["top_k"])}
 
