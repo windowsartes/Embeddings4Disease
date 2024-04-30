@@ -23,26 +23,63 @@ class HeadFactory(ABC):
 
     @abstractmethod
     def initialize(self) -> None:
+        """
+        Additional initialization for your factory. Usually this method is used during the traing and it will be ignored
+        during the model's final validation.
+        """
         pass
 
     @abstractmethod
     def create_model(self) -> torch.nn.Module:
+        """
+        Creates the model you want to train.
+
+        Returns:
+            torch.nn.Module: model you will use later.
+        """
         pass
 
     @abstractmethod
     def load_tokenizer(self) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
+        """
+        Sinse we use pretrained backbone here we'll load pretrained tokenizer.
+
+        Returns:
+            PreTrainedTokenizer | PreTrainedTokenizerFast: pretrained tokenizer.
+        """
         pass
 
     @abstractmethod
     def create_dataloader(self, mode: str) -> DataLoader:
+        """
+        Creates a dataloader you will use during training/validation.
+
+        Args:
+            mode (str): 'training'/'validation'.
+
+        Returns:
+            DataLoader: dataloader you will use.
+        """
         pass
 
     @abstractmethod
     def create_callbacks(self) -> list[custom_callbacks.CustomCallback]:
+        """
+        Creates a list of callbacks that will be used during trainig.
+
+        Returns:
+            list[custom_callbacks.CustomCallback]: list of callback that will be used later.
+        """
         pass
 
     @abstractmethod
     def create_training_args(self) -> TrainingArgs:
+        """
+        Training args for the Trainer.
+
+        Returns:
+            TrainingArgs: Trainer's training arguments.
+        """
         pass
 
 

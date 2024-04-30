@@ -8,6 +8,10 @@ from transformers import PreTrainedModel
 
 
 class LinearBlock(nn.Module):
+    """
+    Simple linear block with Linear layer, optional batch normaliaztion, rele activation and and optional drouout layer.
+    Commonly used by the MultiLabelHead.
+    """
     def __init__(self,
                  input_size: int,
                  output_size: int,
@@ -29,6 +33,22 @@ class LinearBlock(nn.Module):
 
 
 class MultiLabelHead(nn.Module):
+    """
+    Model we want to use with pretrained backbone to predict new diseases person will get in the future.
+
+    Args:
+        backbone (PreTrainedModel): pretrained BERT-like model you want to use as a feature extractor.
+        n_classes (int): maximum number of classes.
+        n_last_layers (int, optional): number of last [CLS] embeddings you want to use for the prediction. Defaults to 4.
+        aggregation (str, optional): [CLS] embeddings aggregation. Can be either 'concatenation' or 'addition'.
+            Defaults to 'concatenation'.
+        mode (str, optional): 'transfer learning' if you want to freeze the backbone or 'fine tuning' if you want to train it.
+            Defaults to 'transfer learning'.
+        hidden_sizes (tuple[int, ...] | list[int], optional): Linear blocks hidden sizes. Defaults to (1024, 512, 256,).
+        hidden_use_dropout (bool, optional): Use dropout inside linear blocks or not. Defaults to True.
+        hidden_dropout_rate (float, optional): dropout's rate. Will be ignored if hidden_use_dropout is False. Defaults to 0.1.
+        hidden_use_normalization (bool, optional): Use normalization inside linear blocks or not. Defaults to True.
+    """
     def __init__(self,
                  backbone: PreTrainedModel,
                  n_classes: int,
@@ -74,10 +94,6 @@ class MultiLabelHead(nn.Module):
         elif self.aggregation == "addition":
             input_size = embedding_size
 
-        '''
-        self.input_block: LinearBlock = LinearBlock(input_size, hidden_sizes[0])
-        '''
-
         self.head = nn.Sequential(OrderedDict([
             (
                 "input_block",
@@ -104,23 +120,6 @@ class MultiLabelHead(nn.Module):
             ),
         ]))
 
-        '''
-        self.hidden_blocks: nn.Sequential = nn.Sequential(OrderedDict([
-            *[(f"hidden_block_{i}",
-               LinearBlock(
-                           hidden_sizes[i],
-                           hidden_sizes[i+1],
-                           hidden_use_dropout,
-                           hidden_dropout_rate,
-                           hidden_use_normalization
-                          )
-              )
-             for i in range(len(hidden_sizes) - 1)]
-        ]))
-
-        self.classification_head: nn.Linear = nn.Linear(hidden_sizes[-1], n_classes)
-        '''
-
     def forward(self, tokenizer_output: dict[str, torch.Tensor]) -> torch.Tensor:
         if self.mode == "transfer learning":
             with torch.no_grad():
@@ -139,5 +138,4 @@ class MultiLabelHead(nn.Module):
                                      dim=-1
                                     ).sum(dim=-1)[:, 0, :]
 
-        # return self.classification_head(self.hidden_blocks(self.input_block(embeddings)))  # type: ignore
         return self.head(embeddings)  # type: ignore

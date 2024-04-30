@@ -203,7 +203,7 @@ class MLMMetricComputer(MetricComputerInterface):
         metrics_to_use: dict[str, bool],
     ) -> dict[str, float]:
         """
-        Base method for the model evaluation. It will computer metrics values during the dataloader you've specified
+        Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
         at the instance initialization.
 
         Args:
@@ -281,7 +281,6 @@ class MLMMetricComputer(MetricComputerInterface):
 class Baseline(MetricComputerInterface):
     """
     A simple baseline model. It just uses the most populat top_k tokens as a prediction.
-
     """
     def __init__(self,
                  config: dict[str, tp.Any],

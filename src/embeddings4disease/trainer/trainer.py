@@ -5,7 +5,6 @@ import numpy as np
 import pytorch_warmup as warmup
 import torch
 import torch.nn as nn
-import typing as tp
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -16,6 +15,16 @@ from embeddings4disease.callbacks import custom_callbacks
 
 
 class Trainer:
+    """
+    Base class for the custom head training. Use it in the case there is no useful trainer in hugging face library.
+
+    Args:
+        model (nn.Module): model you want to train.
+        train_dataloader (DataLoader): dataloader with training data.
+        eval_dataloader (DataLoader): dataloader with validation data.
+        callbacks (list[custom_callbacks.CustomCallback]): list of callback you want to use during the trainig.
+        args (TrainingArgs): trainig args: criterion, hyperparameters and etc.
+    """
     def __init__(
         self,
         model: nn.Module,
@@ -36,6 +45,12 @@ class Trainer:
         self.training_state: TrainingState = TrainingState()
 
     def _create_optimizer(self) -> optim.Optimizer:
+        """
+        Creates an AdamW optimizer with the parameters, specified in trainig_args.
+
+        Returns:
+            optim.Optimizer: your model's AdamW optimizer.
+        """
         if self.training_args.mode == "transfer learning":
             optimizer: optim.AdamW = optim.AdamW(
                 self.model.head.parameters(),
@@ -59,6 +74,15 @@ class Trainer:
         return optimizer
 
     def _create_scheduler(self, optimizer: optim.Optimizer) -> optim.lr_scheduler.LRScheduler:
+        """
+        Creates a cosine scheduler for the given optimizer. Its parameters are specified in the training args.
+
+        Args:
+            optimizer (optim.Optimizer): optimizer you want to schedule.
+
+        Returns:
+            optim.lr_scheduler.LRScheduler: linear scheduler for your optimizer.
+        """
         T_max: int = self.training_args.n_epochs - self.training_args.n_warmup_epochs
 
         scheduler: optim.lr_scheduler.CosineAnnealingLR = (
@@ -68,6 +92,15 @@ class Trainer:
         return scheduler
 
     def _create_warmup_scheduler(self, optimizer: optim.Optimizer) -> warmup.BaseWarmup:
+        """
+        Creates a linear warmup scheduler for the given optimizer. Its parameters are specified in the training_args.
+
+        Args:
+            optimizer (optim.Optimizer): optimizer you want to warmup.
+
+        Returns:
+            warmup.BaseWarmup: warmup scheduler for your optimizer.
+        """
         warmup_period: int = self.training_args.n_warmup_epochs
 
         warmup_scheduler: warmup.LinearWarmup = warmup.LinearWarmup(optimizer, warmup_period=warmup_period)
@@ -75,6 +108,10 @@ class Trainer:
         return warmup_scheduler
 
     def train(self) -> None:
+        """
+        Main method for the model training. For now there is 4 stages: train step, eval_step, 'on_evaluation' on which
+        callback's 'on_evaluation' method is called, 'on_save' on which callbacks's 'on_save' method is called.
+        """
         self.model = self.model.to(self.training_args.device)
 
         optimizer: optim.Optimizer = self._create_optimizer()
@@ -120,6 +157,19 @@ class Trainer:
                     dataloader: DataLoader,
                     criterion: torch.nn.modules.loss._Loss,
                    ) -> float:
+        """
+        One trainig step.
+
+        Args:
+            optimizer (optim.Optimizer): your model's optimizer.
+            scheduler (optim.lr_scheduler.LRScheduler): optimizer's scheduler.
+            warmup_scheduler (warmup.BaseWarmup): optimizer's warmup scheduler.
+            dataloader (DataLoader): dataloader you want to use on training.
+            criterion (torch.nn.modules.loss._Loss): criterion function you want to use.
+
+        Returns:
+            float: average loss during the trainig step.
+        """
         self.model.train()
 
         losses: list[float] = []
@@ -158,6 +208,16 @@ class Trainer:
                    dataloader: DataLoader,
                    criterion: torch.nn.modules.loss._Loss,
                   ) -> float:
+        """
+        One training step.
+
+        Args:
+            dataloader (DataLoader): dataloader you want to use on validation.
+            criterion (torch.nn.modules.loss._Loss): criterion you want to use. Note that backward() won't be called.
+
+        Returns:
+            float: average loss during the validation step.
+        """
         self.model.eval()
 
         losses: list[float] = []
