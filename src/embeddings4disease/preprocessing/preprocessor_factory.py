@@ -3,10 +3,12 @@ import pathlib
 import random
 import typing as tp
 from abc import ABC, abstractmethod
+from datetime import datetime
+from dateutil import parser
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from tqdm import tqdm, std
 
 from embeddings4disease.utils import utils
 
@@ -17,26 +19,6 @@ class PreprocessorFactory(ABC):
     """
     def __init__(self, config: dict[str, tp.Any]):
         self.config: dict[str, tp.Any] = config
-
-    @abstractmethod
-    def make_train_val_split(self) -> None:
-        """
-        This method must make a train-validation split in special format: it must create 2 files
-        for trainin and 2 files for validation.
-        At the first file, transaction are written line-by-line. For example:
-
-        A11 A22 A33
-        B11 B22
-
-        At the second file, we create a seq2seq dataset. So the format must be: source transaction, then comma,
-        then target transaction at the same line. For example:
-
-        A11 A22,A22 A33
-        B11 B22 B33,B22 B44 B55
-
-        Since we haven't done seq2seq yet, this format may change.
-        """
-        pass
 
     @abstractmethod
     def create_vocab(self) -> None:
@@ -53,12 +35,23 @@ class PreprocessorFactory(ABC):
         """
         pass
 
+    @abstractmethod
+    def create_mlm_dataset(self) -> None:
+        """
+        This method is used to create a dataset for Masked Language Modeling (MLM). We'll use it to train backbone model.
+        It must write one transaction on one line. For example, it a person has such transactions: A11 A22, B11 B22 B33;
+        they must be stored as:
+        A11 A22
+        B11 B22 B33
+        """
+        pass
 
-CLASS_REGISTER: dict[str, tp.Type[PreprocessorFactory]] = {}
+
+PREPROCESSOR_REGISTER: dict[str, tp.Type[PreprocessorFactory]] = {}
 
 
 def preprocessor(cls: tp.Type[PreprocessorFactory]) -> tp.Type[PreprocessorFactory]:
-    CLASS_REGISTER[cls.__name__[:-19]] = cls
+    PREPROCESSOR_REGISTER[cls.__name__[:-19]] = cls
     return cls
 
 
@@ -70,10 +63,6 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
-        random_seed: int = self.config["random_seed"]
-        random.seed(random_seed)
-        np.random.seed(random_seed)
-
         storage_dir: pathlib.Path = pathlib.Path(
             os.path.abspath(self.config["storage_dir"])
         )
@@ -81,106 +70,77 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
         self.storage_dir: pathlib.Path = storage_dir
 
-    def make_train_val_split(self) -> None:
-        diagnoses: pd.DataFrame = pd.read_csv(
-            pathlib.Path(os.path.abspath(self.config["data"]))
-        )
+    def create_mlm_dataset(self) -> None:
+        storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("mlm"))
+        utils.create_dir(storage_dir)
+
+        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["diagnoses"]))
         diagnoses = diagnoses[diagnoses.icd_version == 10]
-        diagnoses = self._preprocess_column(
+        diagnoses = self._preprocess_codes(
             diagnoses,
-            "icd_code",
             self.config["code_length"],
             self.config["code_lower_bound"],
             self.config["code_upper_bound"],
         )
 
-        subject_ids: list[int] = list(set(diagnoses["subject_id"]))
+        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["admissions"]))
+        admissions.admittime = utils.str2datetime(admissions.admittime)
 
-        with (
-            open(self.storage_dir.joinpath("train_transactions_single.txt"), "w") as train_single,
-            open(self.storage_dir.joinpath("train_transactions_pair.txt"), "w") as train_pair,
-            open(self.storage_dir.joinpath("val_transactions_single.txt"), "w") as val_single,
-            open(self.storage_dir.joinpath("val_transactions_pair.txt"), "w") as val_pair,
-        ):
-            for subject_index in tqdm(range(len(subject_ids))):
-                subject_transactions: pd.DataFrame = diagnoses[
-                    diagnoses["subject_id"] == subject_ids[subject_index]
-                ]
+        threshold_date: datetime = parser.parse(self.config["threshold_date"])
+
+        admissions_train: pd.DataFrame = admissions[admissions.admittime < threshold_date]
+        admissions_validation: pd.DataFrame = admissions[admissions.admittime >= threshold_date]
+
+        del admissions
+
+        train_dataframe: pd.DataFrame = diagnoses.merge(admissions_train, on=["hadm_id", "subject_id"])
+        validation_dataframe: pd.DataFrame = diagnoses.merge(admissions_validation, on=["hadm_id", "subject_id"])
+
+        del diagnoses
+
+        self._dataframe2file(storage_dir.joinpath("train_transactions.txt"),
+                             train_dataframe,
+                             "train",
+                            )
+
+        self._dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
+                             validation_dataframe,
+                             "validation",
+                            )
+
+    def _dataframe2file(self,
+                        path: str | pathlib.Path,
+                        dataframe: pd.DataFrame,
+                        label: str,
+                       ) -> None:
+        with open(path, "w") as file:
+            subject_ids: list[int] = list(set(dataframe["subject_id"]))
+
+            progress_bar: std.tqdm = tqdm(subject_ids)
+            progress_bar.set_description(f"Creating {label} dataset")
+            for subject_id in progress_bar:
+                subject_transactions: pd.DataFrame = dataframe[dataframe["subject_id"] == subject_id]
 
                 unique_hadm_ids: utils.CustomOrderedSet = utils.CustomOrderedSet()
                 for hadm_id in list(subject_transactions["hadm_id"]):
                     unique_hadm_ids.add(hadm_id)
+
                 hadm_ids: list[int] = [hadm_id for hadm_id in unique_hadm_ids]
 
-                if len(hadm_ids) == 1:
-                    # always send to training
-                    unique_tokens = self._get_unique_tokens(
-                        subject_transactions, hadm_ids[0]
-                    )
-                    train_single.write(" ".join(unique_tokens) + "\n")
-                else:
-                    to_validation: bool = (
-                        True if np.random.uniform() < self.config["epsilon"] else False
-                    )
-
-                    hadm_id_subset: list[int] = hadm_ids[:-2]
-                    for hadm_id_index in range(len(hadm_id_subset)):
-                        unique_tokens = self._get_unique_tokens(
-                            subject_transactions, hadm_id_subset[hadm_id_index]
-                        )
-                        train_single.write(" ".join(unique_tokens) + "\n")
-
-                        if hadm_id_index < len(hadm_id_subset) - 1:
-                            next_unique_tokens = self._get_unique_tokens(
-                                subject_transactions, hadm_id_subset[hadm_id_index + 1]
-                            )
-                            train_pair.write(
-                                " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
-                            )
-
-                    if to_validation:
-                        # send the last 2 transactions to validation
-                        hadm_id_subset = hadm_ids[-2:]
-                        for hadm_id_index in range(len(hadm_id_subset)):
-                            unique_tokens = self._get_unique_tokens(
-                                subject_transactions, hadm_id_subset[hadm_id_index]
-                            )
-                            val_single.write(" ".join(unique_tokens) + "\n")
-
-                            if hadm_id_index < len(hadm_id_subset) - 1:
-                                next_unique_tokens = self._get_unique_tokens(
-                                    subject_transactions,
-                                    hadm_id_subset[hadm_id_index + 1],
-                                )
-                                val_pair.write(
-                                    " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
-                                )
-                    else:
-                        # send the last 2 transactions to training
-                        hadm_id_subset = hadm_ids[-2:]
-                        for hadm_id_index in range(len(hadm_id_subset)):
-                            unique_tokens = self._get_unique_tokens(
-                                subject_transactions, hadm_id_subset[hadm_id_index]
-                            )
-                            train_single.write(" ".join(unique_tokens) + "\n")
-
-                            if hadm_id_index < len(hadm_id_subset) - 1:
-                                next_unique_tokens = self._get_unique_tokens(
-                                    subject_transactions,
-                                    hadm_id_subset[hadm_id_index + 1],
-                                )
-                                train_pair.write(
-                                    " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
-                                )
+                for hadm_id in hadm_ids:
+                    unique_tokens = self._get_unique_tokens(subject_transactions, hadm_id)
+                    file.write(" ".join(unique_tokens) + "\n")
 
     def create_vocab(self) -> None:
         vocab: set[str] = set()
 
         with (
+            open(self.storage_dir.joinpath(pathlib.Path("mlm").joinpath("train_transactions.txt")), "r") as train_file,
             open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
-            open(self.storage_dir.joinpath("train_transactions_single.txt"), "r") as train_single,
         ):
-            for transaction in train_single:
+            progress_bar: std.tqdm = tqdm(train_file)
+            progress_bar.set_description("Creating vocabulary file")
+            for transaction in progress_bar:
                 tokens: list[str] = transaction.split()
 
                 for token in tokens:
@@ -214,9 +174,8 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         return [token for token in custom_ordered_set]
 
     @staticmethod
-    def _preprocess_column(
+    def _preprocess_codes(
         data: pd.DataFrame,
-        target_column: str,
         code_length: int,
         lower_bound: str,
         upper_bound: str,
@@ -226,7 +185,6 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
         Args:
             data (pd.DataFrame): data you want to preprocess.
-            target_column (str): column containing icd-10 code.
             code_length (int): maximum length of icd code.
             lower_bound (str): lower bound of allowed codes (including)
             upper_bound (str): upper bound of allowed codes (including)
@@ -236,8 +194,8 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         """
         code_cutter: utils.CodeCutter = utils.CodeCutter(code_length)
 
-        data[target_column] = pd.Series(data[target_column], dtype="string")
-        data[target_column] = data[target_column].apply(code_cutter)
+        data["icd_code"] = pd.Series(data["icd_code"], dtype="string")
+        data["icd_code"] = data["icd_code"].apply(code_cutter)
 
         data_filtered: pd.DataFrame = data[
             (lower_bound <= data["icd_code"]) & (data["icd_code"] <= upper_bound)
