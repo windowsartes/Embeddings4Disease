@@ -93,7 +93,7 @@ class Trainer:
 
     def _create_warmup_scheduler(self, optimizer: optim.Optimizer) -> warmup.BaseWarmup:
         """
-        Creates a linear warmup scheduler for the given optimizer. Its parameters are specified in the training_args. 
+        Creates a linear warmup scheduler for the given optimizer. Its parameters are specified in the training_args.
 
         Args:
             optimizer (optim.Optimizer): optimizer you want to warmup.

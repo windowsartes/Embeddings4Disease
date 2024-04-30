@@ -47,7 +47,7 @@ class MultiLabelHead(nn.Module):
         hidden_sizes (tuple[int, ...] | list[int], optional): Linear blocks hidden sizes. Defaults to (1024, 512, 256,).
         hidden_use_dropout (bool, optional): Use dropout inside linear blocks or not. Defaults to True.
         hidden_dropout_rate (float, optional): dropout's rate. Will be ignored if hidden_use_dropout is False. Defaults to 0.1.
-        hidden_use_normalization (bool, optional): Use normalization inside linear blocks or not. Defaults to True. 
+        hidden_use_normalization (bool, optional): Use normalization inside linear blocks or not. Defaults to True.
     """
     def __init__(self,
                  backbone: PreTrainedModel,

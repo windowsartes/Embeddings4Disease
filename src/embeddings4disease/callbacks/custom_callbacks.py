@@ -120,7 +120,7 @@ class MetricComputerCallback(CustomCallback):
                     model: nn.Module,
                    ) -> None:
         """
-        Computes metrics' values during the validation. Optionall this method will draw a plots with metrics values 
+        Computes metrics' values during the validation. Optionall this method will draw a plots with metrics values
         during all the evaluation steps.
 
         Args:
@@ -196,7 +196,7 @@ class SaveLossHistoryCallback(CustomCallback):
             training_state (TrainingState): training state. It stores loss history, current epoch number and etc.
             trainihg_args (TrainingArgs): training arg that was created by the factory.
             model (nn.Module): model you want to evaluate.
-        """     
+        """
         with open(self.loss_storage_dir.joinpath("train_loss_history.json"), "w") as f:
             json.dump(training_state.train_loss_history, f)
 
