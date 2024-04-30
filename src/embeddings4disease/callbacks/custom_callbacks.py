@@ -20,7 +20,7 @@ class CustomCallback:
 
     def on_evaluate(self,
                     training_state: TrainingState,
-                    trainig_args: TrainingArgs,
+                    training_args: TrainingArgs,
                     model: nn.Module,
                    ) -> None:
         pass
@@ -116,9 +116,18 @@ class MetricComputerCallback(CustomCallback):
 
     def on_evaluate(self,
                     training_state: TrainingState,
-                    trainig_args: TrainingArgs,
+                    training_args: TrainingArgs,
                     model: nn.Module,
                    ) -> None:
+        """
+        Computes metrics' values during the validation. Optionall this method will draw a plots with metrics values 
+        during all the evaluation steps.
+
+        Args:
+            training_state (TrainingState): training state. It stores loss history, current epoch number and etc.
+            trainihg_args (TrainingArgs): training arg that was created by the factory.
+            model (nn.Module): model you want to evaluate.
+        """
         if training_state.epoch % self.period == 0:
             metrics: dict[str, float] = self.metric_computer.get_metrics_value(
                 model, self.use_metrics
@@ -176,9 +185,18 @@ class SaveLossHistoryCallback(CustomCallback):
 
     def on_evaluate(self,
                     training_state: TrainingState,
-                    trainig_args: TrainingArgs,
+                    training_args: TrainingArgs,
                     model: nn.Module,
                    ) -> None:
+        """
+        Stores loss history on train and validation to the json file. Optionally this method can draw a plots
+        with the loss history.
+
+        Args:
+            training_state (TrainingState): training state. It stores loss history, current epoch number and etc.
+            trainihg_args (TrainingArgs): training arg that was created by the factory.
+            model (nn.Module): model you want to evaluate.
+        """     
         with open(self.loss_storage_dir.joinpath("train_loss_history.json"), "w") as f:
             json.dump(training_state.train_loss_history, f)
 
@@ -226,6 +244,14 @@ class CheckpointCallback(CustomCallback):
                 model: torch.nn.Module,
                 optimizer: torch.optim.Optimizer
                ) -> None:
+        """
+        Saves given model and optimizer at the end of every epoch.
+
+        Args:
+            training_state (TrainingState): training state. It stores loss history, current epoch number and etc.
+            model (torch.nn.Module): model you want to save.
+            optimizer (torch.optim.Optimizer): optimiezer you want to save.
+        """
         # see https://pytorch.org/tutorials/recipes/recipes/saving_and_loading_a_general_checkpoint.html
         checkpoint = {
             "epoch": training_state.epoch,
@@ -247,6 +273,14 @@ class SaveBestModelCallback(CustomCallback):
                 model: torch.nn.Module,
                 optimizer: torch.optim.Optimizer
                ) -> None:
+        """
+        Saves given model in the case its eval loss if lesser than the stored one.
+
+        Args:
+            training_state (TrainingState): training state. It stores loss history, current epoch number and etc.
+            model (torch.nn.Module): model you want to save.
+            optimizer (torch.optim.Optimizer): optimiezer you want to save. Will be ignored.
+        """
         eval_loss_last_value: float = list(training_state.eval_loss_history.values())[-1]
         if training_state.eval_loss_best_value > eval_loss_last_value:
             training_state.eval_loss_best_value = eval_loss_last_value
