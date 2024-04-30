@@ -30,11 +30,31 @@ class MetricComputerInterface(ABC):
     @metric
     @staticmethod
     def _compute_exact_match(answer: np.ndarray, predicted_tokens: np.ndarray) -> float:
+        """
+        Computes exact match. It equals to 1 in the case answer and predicted tokens are the same else 0.
+
+        Args:
+            answer (np.ndarray): Real classes we want to predict. Multy-hot vector.
+            predicted_tokens (np.ndarray): classes your model has predicted. Multy-hot vector.
+
+        Returns:
+            float: exact match value.
+        """
         return float(np.all(answer == predicted_tokens))
 
     @metric
     @staticmethod
     def _compute_accuracy(answer: np.ndarray, predicted_tokens: np.ndarray) -> float:
+        """
+        Computes accuracy. Here accuracy is a ratio of truly predicted classes.
+
+        Args:
+            answer (np.ndarray): Real classes we want to predict. Multy-hot vector.
+            predicted_tokens (np.ndarray): classes your model has predicted. Multy-hot vector.
+
+        Returns:
+            float: accuracy value.
+        """
         eps: float = 1e-9
 
         return float(sum(np.logical_and(answer, predicted_tokens)) / (sum(np.logical_or(answer, predicted_tokens)) + eps))
@@ -42,6 +62,16 @@ class MetricComputerInterface(ABC):
     @metric
     @staticmethod
     def _compute_recall(answer: np.ndarray, predicted_tokens: np.ndarray) -> float:
+        """
+        Computes recall.
+
+        Args:
+            answer (np.ndarray): Real classes we want to predict. Multy-hot vector.
+            predicted_tokens (np.ndarray): classes your model has predicted. Multy-hot vector.
+
+        Returns:
+            float: recall value.
+        """
         if sum(answer) == 0:
             return 0.
 
@@ -50,6 +80,16 @@ class MetricComputerInterface(ABC):
     @metric
     @staticmethod
     def _compute_precision(answer: np.ndarray, predicted_tokens: np.ndarray) -> float:
+        """
+        Computes precision.
+
+        Args:
+            answer (np.ndarray): Real classes we want to predict. Multy-hot vector.
+            predicted_tokens (np.ndarray): classes your model has predicted. Multy-hot vector.
+
+        Returns:
+            float: precision value.
+        """
         if sum(predicted_tokens) == 0:
             return 0.
 
@@ -58,6 +98,16 @@ class MetricComputerInterface(ABC):
     @metric
     @staticmethod
     def _compute_f_score(answer: np.ndarray, predicted_tokens: np.ndarray, beta: float = 1.) -> float:
+        """
+        Computes f_beta-score
+
+        Args:
+            answer (np.ndarray): Real classes we want to predict. Multy-hot vector.
+            predicted_tokens (np.ndarray): classes your model has predicted. Multy-hot vector.
+
+        Returns:
+            float: f-beta-score value.
+        """
         eps: float = 1e-9
 
         precision: float = MetricComputerInterface._compute_precision(answer, predicted_tokens)
@@ -82,6 +132,18 @@ class MultiLabelHeadMetricComputer(MetricComputerInterface):
         model: torch.nn.Module,
         metrics_to_use: dict[str, bool],
     ) -> dict[str, float]:
+        """
+        Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
+        at the instance initialization.
+
+        Args:
+            model (PreTrainedModel): model you want to evaluate.
+            metrics_to_use (dict[str, bool]): metrics you want to use during inference. In the case some metric you've
+            passed in this dictionary doesn't supported, it'll be ignored.
+
+        Returns:
+            dict[str, float]: average metrics' values during evaluation.
+        """
         metrics_storage: dict[str, list[float]] = {}
         for metric, usage in metrics_to_use.items():
             if usage:
