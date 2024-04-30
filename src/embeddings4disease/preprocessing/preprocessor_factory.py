@@ -108,11 +108,37 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                              "validation",
                             )
 
+    def create_vocab(self) -> None:
+        vocab: set[str] = set()
+
+        with (
+            open(self.storage_dir.joinpath(pathlib.Path("mlm").joinpath("train_transactions.txt")), "r") as train_file,
+            open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
+        ):
+            progress_bar: std.tqdm = tqdm(train_file)
+            progress_bar.set_description("Creating vocabulary file")
+            for transaction in progress_bar:
+                tokens: list[str] = transaction.split()
+
+                for token in tokens:
+                    if token not in vocab:
+                        vocab.add(token)
+                        vocab_file.write(token + "\n")
+
+
     def _dataframe2file(self,
                         path: str | pathlib.Path,
                         dataframe: pd.DataFrame,
                         label: str,
                        ) -> None:
+        """
+        Converts preprocessed pandas Dataframe into the txt file.
+
+        Args:
+            path (str | pathlib.Path): path to file where the data will be stored.
+            dataframe (pd.DataFrame): dataframe you want to convert.
+            label (str): label will be used as a tqdm bar description. By design, it can be either 'trainin' or 'validation'.
+        """
         with open(path, "w") as file:
             subject_ids: list[int] = list(set(dataframe["subject_id"]))
 
@@ -130,23 +156,6 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                 for hadm_id in hadm_ids:
                     unique_tokens = self._get_unique_tokens(subject_transactions, hadm_id)
                     file.write(" ".join(unique_tokens) + "\n")
-
-    def create_vocab(self) -> None:
-        vocab: set[str] = set()
-
-        with (
-            open(self.storage_dir.joinpath(pathlib.Path("mlm").joinpath("train_transactions.txt")), "r") as train_file,
-            open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
-        ):
-            progress_bar: std.tqdm = tqdm(train_file)
-            progress_bar.set_description("Creating vocabulary file")
-            for transaction in progress_bar:
-                tokens: list[str] = transaction.split()
-
-                for token in tokens:
-                    if token not in vocab:
-                        vocab.add(token)
-                        vocab_file.write(token + "\n")
 
     @staticmethod
     def _get_unique_tokens(
