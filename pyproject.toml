@@ -53,7 +53,7 @@ development = [
 ]
 
 [project.scripts]
-preprocess = "embeddings4disease.cli.preprocess:preprocess"
+preprocess_mlm = "embeddings4disease.cli.preprocess_mlm:preprocess"
 train_backbone = "embeddings4disease.cli.train_backbone:train"
 train_miltilabel_head = "embeddings4disease.cli.train_multilabel_head:train"
 validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
