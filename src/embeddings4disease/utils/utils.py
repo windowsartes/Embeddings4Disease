@@ -5,6 +5,9 @@ import platform
 import shutil
 import subprocess
 import typing as tp
+from datetime import datetime
+
+import pandas as pd
 
 
 class CodeCutter:
@@ -98,3 +101,39 @@ def get_cwd() -> str:
 
     result = subprocess.run("pwd", text=True, stdout=subprocess.PIPE, shell=True)
     return result.stdout.strip()
+
+def to_datetime(x: pd.Timestamp) -> datetime:
+    """
+    Cast pandas.Timestamp into datetime
+
+    Args:
+        x (pd.Timestamp): date as a timestamp.
+
+    Returns:
+        datetime: date as a datetime.
+    """
+    return x.to_pydatetime()
+
+def str2datetime(column: pd.Series) -> pd.Series:
+    """
+    Used to cast string date representation into datatime
+
+    Args:
+        column (pd.Series): colomn containig dates as string.
+
+    Returns:
+        pd.Series: pandas.Series containing dates as datetime.
+    """
+    return pd.to_datetime(column).apply(to_datetime)
+
+def get_year(x: pd.Timestamp) -> int:
+    """
+    Used to get year value from pandas Timestemp.
+
+    Args:
+        x (pd.Timestamp): timestamp
+
+    Returns:
+        int: year's value
+    """
+    return x.year
