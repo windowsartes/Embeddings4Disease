@@ -22,11 +22,11 @@ keywords = ["TBA"]
 
 
 dependencies = [
-  "accelerate>=0.21.0",
+  "accelerate >= 0.21.0",
   "click",
   "matplotlib",
   "seaborn",
-  "pytorch-warmup=0.1.1",
+  "pytorch-warmup >= 0.1.1",
   "PyYAML >= 6.0.1",
   "torch",
   "transformers >= 4.38.2",
