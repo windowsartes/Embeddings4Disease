@@ -1,31 +1,31 @@
 model:
- type: BERT
+ type: MobileBERT
  use_pretrained: false
  path_to_saved_weights: null
  config:
   hidden_size: 384
-  num_attention_heads: 12
-  num_hidden_layers: 12
+  num_attention_heads: 4
+  num_hidden_layers: 24
 tokenizer:
  use_pretrained: false
  path_to_saved_tokenizer: null
- path_to_vocab_file: data/vocab.txt
+ path_to_vocab_file: data/preprocessed/vocab.txt
 hyperparameters:
  batch_size: 1024
  seq_len: 24
 training:
  device: cuda:0
- path_to_data: data/train_transactions_single.txt
+ path_to_data: data/preprocessed/mlm/train_transactions.txt
  n_epochs: 100
  n_warmup_epochs: 50
  n_checkpoints: 1
  optimizer_parameters:
-  learning_rate: 0.0001
+  learning_rate: 0.0006
   adam_beta1: 0.9
-  adam_beta2: 0.999
+  adam_beta2: 0.98
   weight_decay: 0.01
 validation:
- path_to_data: data/val_transactions_single.txt
+ path_to_data: data/preprocessed/mlm/validation_transactions.txt
  period: 10
  top_k: 10
  save_graphs: true
@@ -40,5 +40,5 @@ validation:
 save_trained_model: true
 wandb:
  use: true
- project: bert
+ project: mobilebert
  api_key: your-api-key

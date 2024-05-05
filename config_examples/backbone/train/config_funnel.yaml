@@ -7,15 +7,15 @@ model:
   n_head: 6
   d_inner: 1536
 tokenizer:
- use_pretrained: true
+ use_pretrained: false
  path_to_saved_tokenizer: null
- path_to_vocab_file: data/vocab.txt
+ path_to_vocab_file: data/preprocessed/vocab.txt
 hyperparameters:
  batch_size: 1024
  seq_len: 24
 training:
  device: cuda:0
- path_to_data: data/train_transactions_single.txt
+ path_to_data: data/preprocessed/mlm/train_transactions.txt
  n_epochs: 100
  n_warmup_epochs: 50
  n_checkpoints: 1
@@ -25,7 +25,7 @@ training:
   adam_beta2: 0.999
   weight_decay: 0.01
 validation:
- path_to_data: data/val_transactions_single.txt
+ path_to_data: data/preprocessed/mlm/validation_transactions.txt
  period: 10
  top_k: 10
  save_graphs: true
@@ -40,5 +40,5 @@ validation:
 save_trained_model: true
 wandb:
  use: true
- project: funnel-transformer
+ project: funnel
  api_key: your-api-key

@@ -96,7 +96,7 @@ If the parameters were not specified in the article and I did not find them in t
 
 | model/parameters | FNet | FunnelTransformer |
 | -------- | ------- | ------- |
-| batch_size | 1024 | 512 |
+| batch_size | 1024 | 1024 |
 | hidden_size | 384 | - |
 | num_hidden_layers | 12 | - |
 | intermediate_size | 1536 | - |

@@ -1,11 +1,11 @@
 model:
- type: FNet
+ type: XLMRoBERTa
  use_pretrained: false
  path_to_saved_weights: null
  config:
   hidden_size: 384
+  num_attention_heads: 12
   num_hidden_layers: 12
-  intermediate_size: 1536
 tokenizer:
  use_pretrained: false
  path_to_saved_tokenizer: null
@@ -40,5 +40,5 @@ validation:
 save_trained_model: true
 wandb:
  use: true
- project: fnet
+ project: xlmroberta
  api_key: your-api-key
