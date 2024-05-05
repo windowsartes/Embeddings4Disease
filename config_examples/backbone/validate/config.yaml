@@ -9,7 +9,7 @@ hyperparameters:
  batch_size: 1024
  seq_len: 24
 validation:
- path_to_data: data/val_transactions_single.txt
+ path_to_data: data/preprocessed/mlm/validation_transactions.txt
  top_k: 10
  metrics: 
   reciprocal_rank: true
