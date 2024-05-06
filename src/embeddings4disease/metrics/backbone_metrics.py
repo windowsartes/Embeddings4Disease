@@ -38,7 +38,7 @@ class MetricComputerInterface(ABC):
     implement it there and mark it with the 'metric' decorator defined above.
     """
     @abstractmethod
-    def get_metrics_value(self, *args, **kwargs) -> dict[str, float]: # type: ignore
+    def get_metrics_value(self, *args, **kwargs) -> dict[str, float] | dict[str, ConfidenceInterval]: # type: ignore
         pass
 
     @metric
@@ -166,6 +166,69 @@ class MetricComputerInterface(ABC):
 
         return 0.
 
+    def _get_point_estimation(self, metrics_storage: dict[str, list[float]]) -> dict[str, float]:
+        metrics_value: dict[str, float] = {}
+
+        for metric in metrics_storage:
+            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+
+        return metrics_value
+
+    def _get_confidence_interval(self,
+                                 metrics_storage: dict[str, list[float]],
+                                 interval_type: str,
+                                 confidence_level: float,
+                                ) -> dict[str, ConfidenceInterval]:
+        metrics_value: dict[str, ConfidenceInterval] = {}
+
+        for metric in metrics_storage:
+            data = metrics_storage[metric]
+            data_bootstrapped = np.random.choice(data, size=(self._n_resamples, len(data)))
+
+            point_estimation = np.mean(data)
+            bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
+
+            if interval_type == "normal":
+                bootstrap_estimations_std = np.std(bootstrap_estimations, ddof=1)
+                quantile = ss.norm.ppf((1 + confidence_level) / 2, loc=0, scale=1)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    round(point_estimation, 4),
+                    (
+                        round(point_estimation - quantile * bootstrap_estimations_std, 4),
+                        round(point_estimation + quantile * bootstrap_estimations_std, 4)
+                    ),
+                )
+
+            elif interval_type == "quantile":
+                bootstrap_estimations_sorted = sorted(bootstrap_estimations)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    round(point_estimation, 4),
+                    (
+                        round(bootstrap_estimations_sorted[math.floor(self._n_resamples * \
+                            ((1 - confidence_level) / 2))], 4),
+                        round(bootstrap_estimations_sorted[math.ceil(self._n_resamples * \
+                            ((1 + confidence_level) / 2))], 4),
+                    ),
+                )
+            else:
+                bootstrap_estimations_sorted = sorted(bootstrap_estimations)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    round(point_estimation, 4),
+                    (
+                        round(2 * point_estimation - \
+                            bootstrap_estimations_sorted[math.ceil(self._n_resamples * \
+                                ((1 + confidence_level) / 2))], 4),
+                        round(2 * point_estimation - \
+                            bootstrap_estimations_sorted[math.floor(self._n_resamples * \
+                                ((1 - confidence_level) / 2))], 4),
+                    ),
+                )
+
+        return metrics_value
+
     @metric
     @staticmethod
     def _compute_hits(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
@@ -201,10 +264,19 @@ class MLMMetricComputer(MetricComputerInterface):
         tokenizer: PreTrainedTokenizer,
         top_k: int,
         dataloader: DataLoader,
+        confidence_interval: bool = False,
+        interval_type: tp.Optional[str] = None,
+        confidence_level: float = 0.95,
     ):
         self.tokenizer: PreTrainedTokenizer = tokenizer
         self.top_k: int = top_k
         self.dataloader: DataLoader = dataloader
+
+        self._confidence_interval: bool = confidence_interval
+        self._interval_type: tp.Optional[str] = interval_type
+        self._confidence_level: float = confidence_level
+
+        self._n_resamples: int = 10000
 
     def get_metrics_value(
         self,
@@ -279,12 +351,15 @@ class MLMMetricComputer(MetricComputerInterface):
                     for metric in metrics_storage:
                         metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
 
-        metrics_value: dict[str, float] = {}
+        if self._confidence_interval and self._interval_type not in ["quantile", "normal", "central"]:
+            warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
+                          "Only point estimation will be returned.")
+            return self._get_point_estimation(metrics_storage)
 
-        for metric in metrics_storage:
-            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+        if not self._confidence_interval:
+            return self._get_point_estimation(metrics_storage)
 
-        return metrics_value
+        return self._get_confidence_interval(metrics_storage, self._interval_type, self._confidence_level)
 
 
 class Baseline(MetricComputerInterface):
@@ -311,69 +386,6 @@ class Baseline(MetricComputerInterface):
         self._top_k_predictions: dict[str, float] = {key: value/number_of_tokens for key, value in self._counter.most_common(config["top_k"])}
         self._n_resamples: int = 10000
 
-    def _get_point_estimation(self, metrics_storage: dict[str, list[float]]) -> dict[str, float]:
-        metrics_value: dict[str, float] = {}
-
-        for metric in metrics_storage:
-            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
-
-        return metrics_value
-
-    def _get_confidence_interval(self,
-                                 metrics_storage: dict[str, list[float]],
-                                 interval_type: str) -> dict[str, ConfidenceInterval]:
-        metrics_value: dict[str, ConfidenceInterval] = {}
-
-        confidence_level = self._config["confidence_level"]
-
-        for metric in metrics_storage:
-            data = metrics_storage[metric]
-            data_bootstrapped = np.random.choice(data, size=(self._n_resamples, len(data)))
-
-            point_estimation = np.mean(data)
-            bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
-
-            if interval_type == "normal":
-                bootstrap_estimations_std = np.std(bootstrap_estimations, ddof=1)
-                quantile = ss.norm.ppf((1 + confidence_level) / 2, loc=0, scale=1)
-
-                metrics_value[metric] = ConfidenceInterval(
-                    round(point_estimation, 4),
-                    (
-                        round(point_estimation - quantile * bootstrap_estimations_std, 4),
-                        round(point_estimation + quantile * bootstrap_estimations_std, 4)
-                    ),
-                )
-
-            elif interval_type == "quantile":
-                bootstrap_estimations_sorted = sorted(bootstrap_estimations)
-
-                metrics_value[metric] = ConfidenceInterval(
-                    round(point_estimation, 4),
-                    (
-                        round(bootstrap_estimations_sorted[math.floor(self._n_resamples * \
-                            ((1 - confidence_level) / 2))], 4),
-                        round(bootstrap_estimations_sorted[math.ceil(self._n_resamples * \
-                            ((1 + confidence_level) / 2))], 4),
-                    ),
-                )
-            else:
-                bootstrap_estimations_sorted = sorted(bootstrap_estimations)
-
-                metrics_value[metric] = ConfidenceInterval(
-                    round(point_estimation, 4),
-                    (
-                        round(2 * point_estimation - \
-                            bootstrap_estimations_sorted[math.ceil(self._n_resamples * \
-                                ((1 + confidence_level) / 2))], 4),
-                        round(2 * point_estimation - \
-                            bootstrap_estimations_sorted[math.floor(self._n_resamples * \
-                                ((1 - confidence_level) / 2))], 4),
-                    ),
-                )
-
-        return metrics_value
-
     def get_metrics_value(
         self,
     ) -> dict[str, float]:
@@ -386,6 +398,7 @@ class Baseline(MetricComputerInterface):
         """
         confidence_interval: bool = self._config["confidence_interval"]
         interval_type: tp.Optional[str] = self._config["interval_type"]
+        confidence_level: float = self._config["confidence_level"]
 
         metrics_storage: dict[str, list[float]] = {}
         for metric, usage in self._config["metrics"].items():
@@ -416,4 +429,4 @@ class Baseline(MetricComputerInterface):
         if not confidence_interval:
             return self._get_point_estimation(metrics_storage)
 
-        return self._get_confidence_interval(metrics_storage, interval_type)
+        return self._get_confidence_interval(metrics_storage, interval_type, confidence_level)

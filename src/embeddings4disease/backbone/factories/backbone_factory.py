@@ -241,7 +241,12 @@ class BackboneFactory(ABC):
         )
 
         metric_computer: backbone_metrics.MLMMetricComputer = backbone_metrics.MLMMetricComputer(
-            tokenizer, self.config["validation"]["top_k"], dataloader
+            tokenizer,
+            self.config["validation"]["top_k"],
+            dataloader,
+            self.config["validation"]["confidence_interval"],
+            self.config["validation"]["interval_type"],
+            self.config["validation"]["confidence_level"],
         )
 
         return (metric_computer, self.config["validation"]["metrics"])
