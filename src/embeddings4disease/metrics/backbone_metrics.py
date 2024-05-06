@@ -6,7 +6,7 @@ from collections import defaultdict, Counter
 from dataclasses import dataclass
 
 import numpy as np
-import scipy.stats as ss
+import scipy.stats as ss  # type: ignore[import-untyped]
 import torch
 from transformers import PreTrainedTokenizer, PreTrainedModel
 from torch.utils.data import DataLoader
@@ -179,11 +179,13 @@ class MetricComputerInterface(ABC):
                                  interval_type: str,
                                  confidence_level: float,
                                 ) -> dict[str, ConfidenceInterval]:
+        n_resamples: int = 10000
+                    
         metrics_value: dict[str, ConfidenceInterval] = {}
 
         for metric in metrics_storage:
             data = metrics_storage[metric]
-            data_bootstrapped = np.random.choice(data, size=(self._n_resamples, len(data)))
+            data_bootstrapped = np.random.choice(data, size=(n_resamples, len(data)))
 
             point_estimation = np.mean(data)
             bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
@@ -193,10 +195,10 @@ class MetricComputerInterface(ABC):
                 quantile = ss.norm.ppf((1 + confidence_level) / 2, loc=0, scale=1)
 
                 metrics_value[metric] = ConfidenceInterval(
-                    round(point_estimation, 4),
+                    float(round(point_estimation, 4)),
                     (
-                        round(point_estimation - quantile * bootstrap_estimations_std, 4),
-                        round(point_estimation + quantile * bootstrap_estimations_std, 4)
+                        float(round(point_estimation - quantile * bootstrap_estimations_std, 4)),
+                        float(round(point_estimation + quantile * bootstrap_estimations_std, 4))
                     ),
                 )
 
@@ -204,26 +206,26 @@ class MetricComputerInterface(ABC):
                 bootstrap_estimations_sorted = sorted(bootstrap_estimations)
 
                 metrics_value[metric] = ConfidenceInterval(
-                    round(point_estimation, 4),
+                    float(round(point_estimation, 4)),
                     (
-                        round(bootstrap_estimations_sorted[math.floor(self._n_resamples * \
-                            ((1 - confidence_level) / 2))], 4),
-                        round(bootstrap_estimations_sorted[math.ceil(self._n_resamples * \
-                            ((1 + confidence_level) / 2))], 4),
+                        float(round(bootstrap_estimations_sorted[math.floor(n_resamples * \
+                            ((1 - confidence_level) / 2))], 4)),
+                        float(round(bootstrap_estimations_sorted[math.ceil(n_resamples * \
+                            ((1 + confidence_level) / 2))], 4)),
                     ),
                 )
             else:
                 bootstrap_estimations_sorted = sorted(bootstrap_estimations)
 
                 metrics_value[metric] = ConfidenceInterval(
-                    round(point_estimation, 4),
+                    float(round(point_estimation, 4)),
                     (
-                        round(2 * point_estimation - \
-                            bootstrap_estimations_sorted[math.ceil(self._n_resamples * \
-                                ((1 + confidence_level) / 2))], 4),
-                        round(2 * point_estimation - \
-                            bootstrap_estimations_sorted[math.floor(self._n_resamples * \
-                                ((1 - confidence_level) / 2))], 4),
+                        float(round(2 * point_estimation - \
+                            bootstrap_estimations_sorted[math.ceil(n_resamples * \
+                                ((1 + confidence_level) / 2))], 4)),
+                        float(round(2 * point_estimation - \
+                            bootstrap_estimations_sorted[math.floor(n_resamples * \
+                                ((1 - confidence_level) / 2))], 4)),
                     ),
                 )
 
@@ -276,13 +278,11 @@ class MLMMetricComputer(MetricComputerInterface):
         self._interval_type: tp.Optional[str] = interval_type
         self._confidence_level: float = confidence_level
 
-        self._n_resamples: int = 10000
-
     def get_metrics_value(
         self,
         model: PreTrainedModel,
         metrics_to_use: dict[str, bool],
-    ) -> dict[str, float]:
+    ) -> dict[str, float] | dict[str, ConfidenceInterval]:
         """
         Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
         at the instance initialization.
@@ -359,7 +359,7 @@ class MLMMetricComputer(MetricComputerInterface):
         if not self._confidence_interval:
             return self._get_point_estimation(metrics_storage)
 
-        return self._get_confidence_interval(metrics_storage, self._interval_type, self._confidence_level)
+        return self._get_confidence_interval(metrics_storage, self._interval_type, self._confidence_level)  # type: ignore[arg-type]
 
 
 class Baseline(MetricComputerInterface):
@@ -384,11 +384,10 @@ class Baseline(MetricComputerInterface):
 
         self._counter: Counter[str] = Counter(dict(sorted(counter.items(), key=lambda item: item[1], reverse=True)))
         self._top_k_predictions: dict[str, float] = {key: value/number_of_tokens for key, value in self._counter.most_common(config["top_k"])}
-        self._n_resamples: int = 10000
 
     def get_metrics_value(
         self,
-    ) -> dict[str, float]:
+    ) -> dict[str, float] | dict[str, ConfidenceInterval]:
         """
         Base method for the baseline evaluation. It will computer metrics values during the validation data you've specified
         at the config.
@@ -429,4 +428,4 @@ class Baseline(MetricComputerInterface):
         if not confidence_interval:
             return self._get_point_estimation(metrics_storage)
 
-        return self._get_confidence_interval(metrics_storage, interval_type, confidence_level)
+        return self._get_confidence_interval(metrics_storage, interval_type, confidence_level)  # type: ignore[arg-type]

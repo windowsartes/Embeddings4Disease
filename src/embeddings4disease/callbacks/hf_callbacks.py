@@ -167,7 +167,7 @@ class MetricComputerCallback(TrainerCallback):
             TrainerControl: Trainer's TrainerControl.
         """
         if (state.epoch - 1) % self.period == 0:
-            metrics: dict[str, float] = self.metric_computer.get_metrics_value(
+            metrics: dict[str, float] = self.metric_computer.get_metrics_value(  # type: ignore[assignment]
                 kwargs["model"].to("cpu"), self.use_metrics
             )
 
