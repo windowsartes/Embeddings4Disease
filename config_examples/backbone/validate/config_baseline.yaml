@@ -1,6 +1,9 @@
 path_to_training_file: data/preprocessed/mlm/train_transactions.txt
 path_to_validation_file: data/preprocessed/mlm/validation_transactions.txt
 top_k: 10
+confidence_interval: true
+interval_type: central
+confidence_level: 0.95
 metrics: 
  reciprocal_rank: true
  simplified_dcg: true
