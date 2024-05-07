@@ -46,6 +46,16 @@ class PreprocessorFactory(ABC):
         """
         pass
 
+    @abstractmethod
+    def create_seq2seq_dataset(self) -> None:
+        """
+        _summary_
+
+        Returns:
+            _type_: _description_
+        """
+        pass
+
 
 PREPROCESSOR_REGISTER: dict[str, tp.Type[PreprocessorFactory]] = {}
 
@@ -69,6 +79,46 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
         utils.create_dir(storage_dir)
 
         self.storage_dir: pathlib.Path = storage_dir
+
+    def create_seq2seq_dataset(self) -> None:
+        storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("seq2seq"))
+        utils.create_dir(storage_dir)
+
+        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["diagnoses"]))
+        diagnoses = diagnoses[diagnoses.icd_version == 10]
+        diagnoses = self._preprocess_codes(
+            diagnoses,
+            self.config["code_length"],
+            self.config["code_lower_bound"],
+            self.config["code_upper_bound"],
+        )
+
+        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["admissions"]))
+        admissions.admittime = utils.str2datetime(admissions.admittime)
+
+        threshold_date: datetime = parser.parse(self.config["threshold_date"])
+
+        admissions_train: pd.DataFrame = admissions[admissions.admittime < threshold_date]
+        admissions_validation: pd.DataFrame = admissions[admissions.admittime >= threshold_date]
+
+        del admissions
+
+        train_dataframe: pd.DataFrame = diagnoses.merge(admissions_train, on=["hadm_id", "subject_id"])
+        validation_dataframe: pd.DataFrame = diagnoses.merge(admissions_validation, on=["hadm_id", "subject_id"])
+
+        del diagnoses
+
+        self._seq2seq_dataframe2file(storage_dir.joinpath("train_transactions.txt"),
+                                     train_dataframe,
+                                     admissions_train,
+                                     "train",
+                                    )
+
+        self._seq2seq_dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
+                                     validation_dataframe,
+                                     admissions_validation,
+                                     "validation",
+                                    )
 
     def create_mlm_dataset(self) -> None:
         storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("mlm"))
@@ -98,15 +148,15 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
         del diagnoses
 
-        self._dataframe2file(storage_dir.joinpath("train_transactions.txt"),
-                             train_dataframe,
-                             "train",
-                            )
+        self._mlm_dataframe2file(storage_dir.joinpath("train_transactions.txt"),
+                                 train_dataframe,
+                                 "train",
+                                )
 
-        self._dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
-                             validation_dataframe,
-                             "validation",
-                            )
+        self._mlm_dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
+                                 validation_dataframe,
+                                 "validation",
+                                )
 
     def create_vocab(self) -> None:
         vocab: set[str] = set()
@@ -125,12 +175,62 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                         vocab.add(token)
                         vocab_file.write(token + "\n")
 
+    def _seq2seq_dataframe2file(self,
+                                path: str | pathlib.Path,
+                                dataframe: pd.DataFrame,
+                                admissions: pd.DataFrame,
+                                label: str,
+                               ) -> None:
+        lower_bound: int = self.config["lower_bound"]
+        upper_bound: int = self.config["upper_bound"]
 
-    def _dataframe2file(self,
-                        path: str | pathlib.Path,
-                        dataframe: pd.DataFrame,
-                        label: str,
-                       ) -> None:
+        with open(path, "w") as file:
+            subject_ids: list[int] = list(set(dataframe["subject_id"]))
+
+            progress_bar: std.tqdm = tqdm(subject_ids)
+            progress_bar.set_description(f"Creating seq2seq {label} dataset")
+
+            for subject_id in progress_bar:
+                subject_transactions: pd.DataFrame = dataframe[dataframe["subject_id"] == subject_id]
+                subject_transactions = subject_transactions.sort_values(by="admittime")
+
+                # collect unique hadm_id, saving an order.
+                unique_hadm_ids: utils.CustomOrderedSet = utils.CustomOrderedSet()
+                for hadm_id in subject_transactions.hadm_id.values:
+                    unique_hadm_ids.add(hadm_id)
+
+                hadm_ids: list[int] = [hadm_id for hadm_id in unique_hadm_ids]
+
+                if len(hadm_ids) > 1:
+                    for i in range(0, len(hadm_ids) - 1):
+                        source_hadm_id = hadm_ids[i]
+                        source_admittime = admissions[admissions.hadm_id == source_hadm_id].admittime.values[0]
+
+                        # collect admissions that are within the required date range.
+                        target_hadm_ids = []
+                        for target_hadm_id in hadm_ids[i+1:]:
+                            target_admittime = admissions[admissions.hadm_id == target_hadm_id].admittime.values[0]
+
+                            diff_in_months = ((target_admittime - source_admittime).astype("timedelta64[M]"))/np.timedelta64(1, "M")
+                            if lower_bound <= diff_in_months <= upper_bound:
+                                target_hadm_ids.append(target_hadm_id)
+
+                        if len(target_hadm_ids) != 0:
+                            # make target
+                            source_diseases: set[str] = set(subject_transactions[subject_transactions.hadm_id == source_hadm_id].icd_code.values)
+
+                            target_diseases: set[str] = source_diseases.copy()
+                            for target_hadm_id in target_hadm_ids:
+                                target_diseases.update(set(subject_transactions[subject_transactions.hadm_id == target_hadm_id].icd_code.values))
+                            target_diseases.difference_update(source_diseases)
+
+                            file.write(" ".join(source_diseases) + "," + " ".join(target_diseases) + "\n")
+
+    def _mlm_dataframe2file(self,
+                            path: str | pathlib.Path,
+                            dataframe: pd.DataFrame,
+                            label: str,
+                           ) -> None:
         """
         Converts preprocessed pandas Dataframe into the txt file.
 
@@ -143,7 +243,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
             subject_ids: list[int] = list(set(dataframe["subject_id"]))
 
             progress_bar: std.tqdm = tqdm(subject_ids)
-            progress_bar.set_description(f"Creating {label} dataset")
+            progress_bar.set_description(f"Creating mlm {label} dataset")
             for subject_id in progress_bar:
                 subject_transactions: pd.DataFrame = dataframe[dataframe["subject_id"] == subject_id]
 

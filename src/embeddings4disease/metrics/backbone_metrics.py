@@ -180,7 +180,7 @@ class MetricComputerInterface(ABC):
                                  confidence_level: float,
                                 ) -> dict[str, ConfidenceInterval]:
         n_resamples: int = 10000
-                    
+
         metrics_value: dict[str, ConfidenceInterval] = {}
 
         for metric in metrics_storage:
