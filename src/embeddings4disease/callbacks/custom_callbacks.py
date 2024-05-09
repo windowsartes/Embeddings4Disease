@@ -141,6 +141,8 @@ class MetricComputerCallback(CustomCallback):
                     self.__dump_logs(metric_name, logs)
 
                     if self.save_plot:
+                        sns.set()
+
                         x_ticks: list[int] = [
                             int(float(value)) for value in list(logs.keys())
                         ]
@@ -204,6 +206,8 @@ class SaveLossHistoryCallback(CustomCallback):
             json.dump(training_state.eval_loss_history, f)
 
         if self.save_plot:
+            sns.set()
+
             loss_train_history = list(training_state.train_loss_history.values())
             loss_val_history = list(training_state.eval_loss_history.values())
 
