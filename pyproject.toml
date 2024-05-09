@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "embeddings4disease"
-version = "0.2.0"
+version = "0.2.1"
 
 authors = [
   {name = "Lipkovich Mikhail"},
@@ -54,8 +54,10 @@ development = [
 
 [project.scripts]
 preprocess_mlm = "embeddings4disease.cli.preprocess_mlm:preprocess"
+preprocess_seq2seq = "embeddings4disease.cli.preprocess_seq2seq:preprocess"
 train_backbone = "embeddings4disease.cli.train_backbone:train"
 train_miltilabel_head = "embeddings4disease.cli.train_multilabel_head:train"
+train_encoderdecoder_head = "embeddings4disease.cli.train_encoderdecoder_head:train"
 validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
 validate_baseline = "embeddings4disease.cli.validate_baseline:validate"
 
