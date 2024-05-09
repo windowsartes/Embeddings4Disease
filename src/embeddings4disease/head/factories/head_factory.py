@@ -6,7 +6,7 @@ from datetime import datetime
 
 import torch
 import transformers
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
@@ -65,6 +65,14 @@ class HeadFactory(ABC):
     def create_callbacks(self) -> list[transformers.TrainerCallback] | list[custom_callbacks.CustomCallback]:
         pass
 
+    @abstractmethod
+    def create_dataset(self, mode: str) -> Dataset:
+        pass
+
+    @abstractmethod
+    def create_collator(self) -> tp.Callable:
+        pass
+
     def _create_storage(self) -> None:
         """
         This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
@@ -83,19 +91,6 @@ class HeadFactory(ABC):
 class CustomHeadFactory(HeadFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
-
-    @abstractmethod
-    def create_dataloader(self, mode: str) -> DataLoader:
-        """
-        Creates a dataloader you will use during training/validation.
-
-        Args:
-            mode (str): 'training'/'validation'.
-
-        Returns:
-            DataLoader: dataloader you will use.
-        """
-        pass
 
     @abstractmethod
     def create_callbacks(self) -> list[custom_callbacks.CustomCallback]:
@@ -183,24 +178,23 @@ class MultiLabelHeadFactory(CustomHeadFactory):
             os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
         )
 
-    def create_dataloader(self, mode: str) -> DataLoader:
+    def create_dataset(self, mode: str) -> MultiLabelHeadDataset:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
 
         dataset: MultiLabelHeadDataset = MultiLabelHeadDataset(
             os.path.abspath(self.config[mode]["path_to_data"]), tokenizer
         )
-        collate_fn: MultiLabelHeadCollator = MultiLabelHeadCollator(
+
+        return dataset
+
+    def create_collator(self) -> MultiLabelHeadCollator:
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
+
+        collator: MultiLabelHeadCollator = MultiLabelHeadCollator(
             tokenizer, self.config["hyperparameters"]["seq_len"]
         )
 
-        return DataLoader(
-            dataset,
-            batch_size=self.config["hyperparameters"]["batch_size"],
-            collate_fn=collate_fn,
-            # shuffle=True if mode=="training" else False,
-            shuffle=True,
-            drop_last=True,
-        )
+        return collator
 
     def create_callbacks(self) -> list[custom_callbacks.CustomCallback]:
         used_callbacks: list[custom_callbacks.CustomCallback] = []
@@ -222,7 +216,6 @@ class MultiLabelHeadFactory(CustomHeadFactory):
                 custom_callbacks.MetricComputerCallback(
                     metrics_storage_dir=self.storage_path.joinpath("metrics"),
                     use_metrics=self.config["validation"]["metrics"],
-                    dataloader=self.create_dataloader("validation"),
                     device=device,
                     period=self.config["validation"]["period"],
                     threshold=self.config["validation"]["threshold"],
@@ -244,6 +237,7 @@ class MultiLabelHeadFactory(CustomHeadFactory):
             n_warmup_epochs=self.config["training"]["n_warmup_epochs"],
             device=torch.device(self.config["training"]["device"]),
             criterion=torch.nn.BCEWithLogitsLoss,
+            batch_size=self.config["hyperparameters"]["batch_size"],
             **self.config["training"]["optimizer_parameters"],
         )
 

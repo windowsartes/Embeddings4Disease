@@ -1,12 +1,13 @@
 import os
 import platform
+import typing as tp
 
 import numpy as np
 import pytorch_warmup as warmup
 import torch
 import torch.nn as nn
 from torch import optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from embeddings4disease.callbacks.custom_callbacks import CustomCallback
@@ -28,15 +29,29 @@ class Trainer:
     def __init__(
         self,
         model: nn.Module,
-        train_dataloader: DataLoader,
-        eval_dataloader: DataLoader,
+        data_collator: tp.Callable,
+        train_dataset: Dataset,
+        eval_dataset: Dataset,
         callbacks: list[CustomCallback],
         args: TrainingArgs,
     ):
         self.model: nn.Module = model
 
-        self.train_dataloader: DataLoader = train_dataloader
-        self.eval_dataloader: DataLoader = eval_dataloader
+        self.train_dataloader: DataLoader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            collate_fn=data_collator,
+            drop_last=True,
+        )
+
+        self.eval_dataloader: DataLoader = DataLoader(
+            eval_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            collate_fn=data_collator,
+            drop_last=False,
+        )
 
         self.callbacks: list[CustomCallback] = callbacks
 
@@ -134,17 +149,26 @@ class Trainer:
             self.training_state.train_loss_history[epoch] = average_train_loss
 
             average_eval_loss: float = self._eval_step(
-                                                       dataloader=self.eval_dataloader,
-                                                       criterion=criterion,
-                                                      )
+                dataloader=self.eval_dataloader,
+                criterion=criterion,
+            )
 
             self.training_state.eval_loss_history[epoch] = average_eval_loss
 
             for callback in self.callbacks:
-                callback.on_evaluate(self.training_state, self.training_args, self.model)
+                callback.on_evaluate(
+                    self.training_state,
+                    self.training_args,
+                    self.model,
+                    **{"dataloader": self.eval_dataloader},
+                )
 
             for callback in self.callbacks:
-                callback.on_save(self.training_state, self.model, optimizer)
+                callback.on_save(
+                    self.training_state,
+                    self.model,
+                    optimizer,
+                )
 
             self.training_state.epoch += 1
 

@@ -14,15 +14,17 @@ def train(config_path: str) -> None:
     model = factory.create_model()
     training_args = factory.create_training_args()
 
-    dataloader_train = factory.create_dataloader("training")
-    dataloader_eval = factory.create_dataloader("validation")
+    data_collator = factory.create_collator()
+    dataset_train = factory.create_dataset("training")
+    dataset_eval = factory.create_dataset("validation")
 
     callbacks = factory.create_callbacks()
 
     trainer = Trainer(
         model=model,
-        train_dataloader=dataloader_train,
-        eval_dataloader=dataloader_eval,
+        data_collator=data_collator,
+        train_dataset=dataset_train,
+        eval_dataset=dataset_eval,
         callbacks=callbacks,
         args=training_args,
     )
