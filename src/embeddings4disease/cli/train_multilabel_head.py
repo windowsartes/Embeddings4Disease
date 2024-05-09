@@ -1,7 +1,7 @@
 import click
 
 from embeddings4disease.head.factories import abstract_factory
-from embeddings4disease.trainer import Trainer
+from embeddings4disease.trainer.trainer import Trainer
 
 
 @click.command()
