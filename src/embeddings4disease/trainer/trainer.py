@@ -9,9 +9,9 @@ from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from embeddings4disease.callbacks.custom_callbacks import CustomCallback
 from embeddings4disease.trainer.training_args import TrainingArgs
 from embeddings4disease.trainer.training_state import TrainingState
-from embeddings4disease.callbacks import custom_callbacks
 
 
 class Trainer:
@@ -30,7 +30,7 @@ class Trainer:
         model: nn.Module,
         train_dataloader: DataLoader,
         eval_dataloader: DataLoader,
-        callbacks: list[custom_callbacks.CustomCallback],
+        callbacks: list[CustomCallback],
         args: TrainingArgs,
     ):
         self.model: nn.Module = model
@@ -38,7 +38,7 @@ class Trainer:
         self.train_dataloader: DataLoader = train_dataloader
         self.eval_dataloader: DataLoader = eval_dataloader
 
-        self.callbacks: list[custom_callbacks.CustomCallback] = callbacks
+        self.callbacks: list[CustomCallback] = callbacks
 
         self.training_args: TrainingArgs = args
 
