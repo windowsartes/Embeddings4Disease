@@ -2,18 +2,19 @@ import os
 import pathlib
 import typing as tp
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 import torch
-from datetime import datetime
+import transformers
 from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
-from embeddings4disease.callbacks import custom_callbacks
+from embeddings4disease.callbacks import custom_callbacks, hf_callbacks
 from embeddings4disease.head.architectures import multilabel_head
-from embeddings4disease.data.datasets import MultiLabelHeadDataset
+from embeddings4disease.data.datasets import MultiLabelHeadDataset, EncoderDecoderDataset
 from embeddings4disease.data.collators import MultiLabelHeadCollator
-from embeddings4disease.trainer import TrainingArgs
+from embeddings4disease.trainer.training_args import TrainingArgs
 from embeddings4disease.utils import utils
 
 
@@ -50,6 +51,40 @@ class HeadFactory(ABC):
         pass
 
     @abstractmethod
+    def create_training_args(self) -> TrainingArgs | transformers.TrainingArguments:
+        """
+        Training args for the Trainer.
+
+        Returns:
+            TrainingArgs: Trainer's training arguments.
+        """
+        pass
+
+
+    @abstractmethod
+    def create_callbacks(self) -> list[transformers.TrainerCallback] | list[custom_callbacks.CustomCallback]:
+        pass
+
+    def _create_storage(self) -> None:
+        """
+        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
+        """
+        working_dir: pathlib.Path = pathlib.Path(utils.get_cwd())
+
+        now = datetime.now()
+        data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
+
+        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
+        utils.create_dir(storage_path)
+
+        self.storage_path: pathlib.Path = storage_path
+
+
+class CustomHeadFactory(HeadFactory):
+    def __init__(self, config: dict[str, tp.Any]):
+        super().__init__(config)
+
+    @abstractmethod
     def create_dataloader(self, mode: str) -> DataLoader:
         """
         Creates a dataloader you will use during training/validation.
@@ -83,16 +118,37 @@ class HeadFactory(ABC):
         pass
 
 
+class HuggingFaceHeadFactory(HeadFactory):
+    def __init__(self, config: dict[str, tp.Any]):
+        super().__init__(config)
+
+    @abstractmethod
+    def create_collator(self) -> transformers.DataCollatorForSeq2Seq:
+        pass
+
+    @abstractmethod
+    def create_dataset(self, mode: str) -> EncoderDecoderDataset:
+        pass
+
+    @abstractmethod
+    def create_training_args(self) -> transformers.TrainingArguments:
+        pass
+
+    @abstractmethod
+    def create_callbacks(self) -> list[transformers.TrainerCallback]:
+        pass
+
+
 HEAD_REGISTER: dict[str, tp.Type[HeadFactory]] = {}
 
 
 def head(cls: tp.Type[HeadFactory]) -> tp.Type[HeadFactory]:
-    HEAD_REGISTER[cls.__name__[:-7]] = cls
+    HEAD_REGISTER[cls.__name__[:-11]] = cls
     return cls
 
 
 @head
-class MultiLabelHeadFactory(HeadFactory):
+class MultiLabelHeadFactory(CustomHeadFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
@@ -191,16 +247,128 @@ class MultiLabelHeadFactory(HeadFactory):
             **self.config["training"]["optimizer_parameters"],
         )
 
-    def _create_storage(self) -> None:
-        """
-        This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.
-        """
-        working_dir: pathlib.Path = pathlib.Path(utils.get_cwd())
 
-        now = datetime.now()
-        data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
+@head
+class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
+    def __init__(self, config: dict[str, tp.Any]):
+        super().__init__(config)
 
-        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
-        utils.create_dir(storage_path)
+    def initialize(self) -> None:
+        self._create_storage()
 
-        self.storage_path: pathlib.Path = storage_path
+    def load_tokenizer(self) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
+        if self.config["tokenizer"]["from_huggingface"]:
+            return AutoTokenizer.from_pretrained(
+                self.config["tokenizer"]["path_to_saved_tokenizer"]
+            )
+
+        return AutoTokenizer.from_pretrained(
+            os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+        )
+
+    def create_model(self) -> transformers.EncoderDecoderModel:
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
+
+        if self.config["model"]["from_encoder_decoder"]:
+            if self.config["model"]["encode"]["from_huggingface"]:
+                path_to_saved_encoder: str = self.config["model"]["encode"]["path_to_saved_model"]
+            else:
+                path_to_saved_encoder = os.path.abspath(self.config["model"]["encode"]["path_to_saved_model"])
+
+            if self.config["model"]["decoder"]["from_huggingface"]:
+                path_to_saved_decoder: str = self.config["model"]["decoder"]["path_to_saved_model"]
+            else:
+                path_to_saved_decoder = os.path.abspath(self.config["model"]["decoder"]["path_to_saved_model"])
+
+            self._model = transformers.EncoderDecoderModel.from_encoder_decoder_pretrained(
+                path_to_saved_encoder,
+                path_to_saved_decoder,
+            )
+        else:
+            if self.config["model"]["saved_model"]["from_huggingface"]:
+                path_to_saved_model: str = self.config["model"]["saved_model"]["path_to_saved_model"]
+            else:
+                path_to_saved_model = os.path.abspath(self.config["model"]["saved_model"]["path_to_saved_model"])
+
+            self._model = transformers.EncoderDecoderModel.from_pretrained(path_to_saved_model)
+
+        self._model.config.decoder.decoder_start_token_id = tokenizer.cls_token_id
+        self._model.config.decoder.pad_token_id = tokenizer.pad_token_id
+        self._model.config.decoder.bos_token_id = tokenizer.cls_token_id
+
+        self._model.config.encoder.decoder_start_token_id = tokenizer.cls_token_id
+        self._model.config.encoder.pad_token_id = tokenizer.pad_token_id
+        self._model.config.encoder.bos_token_id = tokenizer.cls_token_id
+
+        self._model.config.decoder_start_token_id = tokenizer.cls_token_id
+        self._model.config.pad_token_id = tokenizer.pad_token_id
+        self._model.config.bos_token_id = tokenizer.cls_token_id
+
+        self._model.generation_config.decoder_start_token_id = tokenizer.cls_token_id
+
+        return self._model
+
+    def create_collator(self) -> transformers.DataCollatorForSeq2Seq:
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
+        max_length: int = self.config["hyperparameters"]["seq_len"]
+
+        collator: transformers.DataCollatorForSeq2Seq = transformers.DataCollatorForSeq2Seq(
+            tokenizer,
+            model=self._model,
+            padding="longest",
+            max_length=max_length,
+        )
+
+        return collator
+
+    def create_dataset(self, mode: str) -> EncoderDecoderDataset:
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
+            self.load_tokenizer()
+        )
+
+        dataset: EncoderDecoderDataset = EncoderDecoderDataset(
+            path=os.path.abspath(self.config[mode]["path_to_data"]),
+            tokenizer=tokenizer,
+            max_length=self.config["hyperparameters"]["seq_len"],
+        )
+
+        return dataset
+
+    def create_training_args(self) -> transformers.Seq2SeqTrainingArguments:
+        checkpoint_path: pathlib.Path = self.storage_path.joinpath("checkpoint")
+
+        utils.create_dir(checkpoint_path)
+        utils.delete_files(checkpoint_path)
+
+        args = transformers.Seq2SeqTrainingArguments(
+            output_dir=str(checkpoint_path),
+            overwrite_output_dir=True,
+            num_train_epochs=self.config["training"]["n_epochs"],
+            per_device_train_batch_size=self.config["hyperparameters"]["batch_size"],
+            per_device_eval_batch_size=self.config["hyperparameters"]["batch_size"]*2,
+            evaluation_strategy="epoch",
+            logging_strategy="epoch",
+            save_strategy="epoch",
+            save_total_limit=1,
+            learning_rate=2e-5,
+            weight_decay=0.01,
+            lr_scheduler_type="cosine",
+            max_grad_norm=1.0,
+            predict_with_generate=True,
+            fp16=True,
+            prediction_loss_only=True,
+        )
+
+        return args
+
+    def create_callbacks(self) -> list[transformers.TrainerCallback]:
+        used_callbacks = []
+
+        used_callbacks.append(
+            hf_callbacks.SaveLossHistoryCallback(
+                loss_storage_dir=self.storage_path.joinpath("loss"),
+                save_plot=self.config["validation"]["save_graphs"],
+            )
+        )
+
+        return used_callbacks
