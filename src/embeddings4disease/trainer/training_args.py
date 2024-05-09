@@ -14,4 +14,5 @@ class TrainingArgs:
     n_epochs: int
     n_warmup_epochs: int
     criterion: tp.Type[torch.nn.modules.loss._Loss]
+    batch_size: int
     device: torch.device
