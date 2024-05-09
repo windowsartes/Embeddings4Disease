@@ -1,5 +1,5 @@
 model:
- type: MultiLabelHead
+ type: MultiLabel
  backbone:
   from_huggingface: true
   path_to_saved_model: windowsartes/bert
@@ -19,7 +19,7 @@ hyperparameters:
  seq_len: 24
 training:
  device: cuda:0
- path_to_data: data/preprocessed/train_transactions_pair.txt
+ path_to_data: data/preprocessed/seq2seq/train_transactions.txt
  n_epochs: 10
  n_warmup_epochs: 5
  optimizer_parameters:
@@ -29,11 +29,11 @@ training:
   adam_beta2: 0.999
   weight_decay: 0.01
 validation:
- path_to_data: data/preprocessed/val_transactions_pair.txt
+ path_to_data: data/preprocessed/seq2seq/validation_transactions.txt
  period: 1
  threshold: 0.25
  metrics: 
-  exact_match: true
+  exact_match: false
   accuracy: true
   precision: true
   recall: true
