@@ -10,8 +10,6 @@ import typing as tp
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from embeddings4disease.data.datasets import SourceTargetStringsDataset
-
 
 METRIC_REGISTER: dict[str, tp.Callable[[npt.NDArray[np.float64], npt.NDArray[np.float64]], float]] = {}
 
@@ -195,7 +193,7 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
         self.device: torch.device = device
 
         self.tokenizer: transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast = tokenizer
-        self.vocab: set = tokenizer.get_vocab()
+        self.vocab: dict[str, str] = tokenizer.get_vocab()
 
         self.max_length: int = max_length
 
@@ -277,7 +275,10 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
                     ).sum(dim=0).float()
 
                     for metric in metrics_storage:
-                        metrics_storage[metric].append(METRIC_REGISTER[metric](answer_one_hot, predictions_one_hot))
+                        metrics_storage[metric].append(METRIC_REGISTER[metric](
+                            answer_one_hot.numpy(),
+                            predictions_one_hot.numpy()
+                        ))
             progress_bar.close()
 
         metrics_value: dict[str, float] = {}

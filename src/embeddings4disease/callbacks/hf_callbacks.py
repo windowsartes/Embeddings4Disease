@@ -22,7 +22,7 @@ except ImportError:
 else:
     wandb_installed = True
 
-from embeddings4disease.data.datasets import SourceTargetStringsDataset
+from embeddings4disease.data.datasets import SourceTargetStringsDataset, CustomLineByLineDataset
 from embeddings4disease.data.collators import MaskingCollator
 from embeddings4disease.metrics.backbone_metrics import MLMMetricComputer
 from embeddings4disease.metrics.multilabel_head_metrics import EncoderDecoderHeadMetricComputer
@@ -407,8 +407,9 @@ class EncoderDecoderMetricComputerCallback(TrainerCallback):
             TrainerControl: Trainer's TrainerControl.
         """
         if (state.epoch - 1) % self.period == 0:
-            metrics: dict[str, float] = self.metric_computer.get_metrics_value(  # type: ignore[assignment]
-                kwargs["model"].to("cpu"), self.use_metrics
+            metrics: dict[str, float] = self.metric_computer.get_metrics_value(
+                kwargs["model"].to("cpu"),
+                self.use_metrics
             )
 
             kwargs["model"].to(self.device)
