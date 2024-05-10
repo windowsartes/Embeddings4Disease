@@ -367,3 +367,17 @@ class EncoderDecoderDataset(Dataset):
         )
 
         return model_inputs
+
+
+class SourceTargetStringsDataset(Dataset):
+    def __init__(self, path: pathlib.Path | str):
+        with open(path, "r") as input_file:
+            self.pairs: list[str] = input_file.readlines()
+
+    def __len__(self) -> int:
+        return len(self.pairs)
+
+    def __getitem__(self, index: int) -> tuple[str, str]:
+        source_str, target_str = self.pairs[index].strip().split(",")
+
+        return source_str, target_str
