@@ -219,7 +219,7 @@ class MultiLabelHeadFactory(CustomHeadFactory):
                     device=device,
                     period=self.config["validation"]["period"],
                     threshold=self.config["validation"]["threshold"],
-                    save_plot=True,
+                    save_plot=self.config["validation"]["save_graphs"],
                 )
             )
 
@@ -357,6 +357,34 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
 
     def create_callbacks(self) -> list[transformers.TrainerCallback]:
         used_callbacks = []
+
+        compute_metrics: bool = False
+        for value in self.config["validation"]["metrics"].values():
+            if value:
+                compute_metrics = value
+                break
+
+        if compute_metrics:
+            device: torch.device = torch.device(
+                self.config["training"]["device"]
+                if torch.cuda.is_available()
+                else "cpu"
+            )
+
+            used_callbacks.append(
+                hf_callbacks.EncoderDecoderMetricComputerCallback(
+                    path_to_data=self.config["validation"]["path_to_data"],
+                    metrics_storage_dir=self.storage_path.joinpath("metrics"),
+                    tokenizer=self.load_tokenizer(),
+                    use_metrics=self.config["validation"]["metrics"],
+                    device=device,
+                    period=self.config["validation"]["period"],
+                    batch_size=self.config["hyperparameters"]["batch_size"],
+                    seq_len=self.config["hyperparameters"]["seq_len"],
+                    use_wandb=False,
+                    save_plot=self.config["validation"]["save_graphs"],
+                )
+            )
 
         used_callbacks.append(
             hf_callbacks.SaveLossHistoryCallback(
