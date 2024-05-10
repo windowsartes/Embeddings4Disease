@@ -1,8 +1,12 @@
+import warnings
+
 import click
 import transformers
 
 from embeddings4disease.head.factories import abstract_factory
 
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
