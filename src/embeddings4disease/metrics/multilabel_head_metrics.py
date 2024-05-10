@@ -264,14 +264,13 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
                         predicted_tokens = predicted_tokens[predicted_tokens != self.vocab[special_token]]
                         answer = answer[answer != self.vocab[special_token]]
 
-                    answer_tokens_codes_tensor: torch.Tensor = torch.tensor(answer).long()
                     answer_one_hot: torch.Tensor = torch.nn.functional.one_hot(
-                        answer_tokens_codes_tensor, num_classes=len(self.vocab),
+                        torch.tensor(answer).long(), num_classes=len(self.vocab),
                     ).sum(dim=0).float()
 
-                    predicted_tokens_codes_tensor: torch.Tensor = torch.tensor(predicted_tokens).long()
                     predictions_one_hot: torch.Tensor = torch.nn.functional.one_hot(
-                        predicted_tokens_codes_tensor, num_classes=len(self.vocab),
+                        predicted_tokens.long(),
+                        num_classes=len(self.vocab),
                     ).sum(dim=0).float()
 
                     for metric in metrics_storage:

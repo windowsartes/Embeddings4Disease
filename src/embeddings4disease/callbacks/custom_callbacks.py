@@ -178,6 +178,8 @@ class MetricComputerCallback(CustomCallback):
                             )
                         )
 
+                        plt.close(fig)
+
 
 class SaveLossHistoryCallback(CustomCallback):
     def __init__(self, loss_storage_dir: str | pathlib.Path, save_plot: bool):
@@ -242,6 +244,8 @@ class SaveLossHistoryCallback(CustomCallback):
             plt.legend()
 
             plt.savefig(self.loss_storage_dir.joinpath("loss.png"))
+
+            plt.close(fig)
 
 
 class CheckpointCallback(CustomCallback):

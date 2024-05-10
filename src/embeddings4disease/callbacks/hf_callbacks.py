@@ -211,6 +211,8 @@ class MetricComputerCallback(TrainerCallback):
                             pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
                         ))
 
+                        plt.close(fig)
+
             if wandb_installed and self.use_wandb:
                 wandb.log({f"eval/{metric_name}": metrics[metric_name] for metric_name, usage in self.use_metrics.items() if usage})
 
@@ -289,6 +291,8 @@ class SaveLossHistoryCallback(TrainerCallback):
             plt.legend()
 
             plt.savefig(self.loss_storage_dir.joinpath("loss.png"))
+
+            plt.close(fig)
 
         return control
 
@@ -450,6 +454,8 @@ class EncoderDecoderMetricComputerCallback(TrainerCallback):
                         plt.savefig(self.metrics_storage_dir.joinpath(
                             pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
                         ))
+
+                        plt.close(fig)
 
             if wandb_installed and self.use_wandb:
                 wandb.log({f"eval/{metric_name}": metrics[metric_name] for metric_name, usage in self.use_metrics.items() if usage})
