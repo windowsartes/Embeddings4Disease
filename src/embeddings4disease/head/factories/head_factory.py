@@ -6,7 +6,7 @@ from datetime import datetime
 
 import torch
 import transformers
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
@@ -14,6 +14,7 @@ from embeddings4disease.callbacks import custom_callbacks, hf_callbacks
 from embeddings4disease.head.architectures import multilabel_head
 from embeddings4disease.data.datasets import MultiLabelHeadDataset, EncoderDecoderDataset
 from embeddings4disease.data.collators import MultiLabelHeadCollator
+from embeddings4disease.metrics import multilabel_head_metrics
 from embeddings4disease.trainer.training_args import TrainingArgs
 from embeddings4disease.utils import utils
 
@@ -71,6 +72,10 @@ class HeadFactory(ABC):
 
     @abstractmethod
     def create_collator(self) -> tp.Callable:
+        pass
+
+    @abstractmethod
+    def create_metric_computer(self) -> tuple[multilabel_head_metrics.MetricComputerInterface, dict[str, bool]]:
         pass
 
     def _create_storage(self) -> None:
@@ -162,9 +167,14 @@ class MultiLabelHeadFactory(CustomHeadFactory):
                 os.path.abspath(self.config["model"]["backbone"]["path_to_saved_model"])
             )
 
-        model = multilabel_head.MultiLabelHead(backbone, tokenizer.vocab_size,
-                                               **self.config["model"]["head"]
-                                              )
+        model = multilabel_head.MultiLabelHead(
+            backbone,
+            tokenizer.vocab_size,
+            **self.config["model"]["head"],
+        )
+
+        if self.config["model"]["from_pretrained"]:
+            model.load_state_dict(torch.load(os.path.abspath(self.config["model"]["path_to_pretrained_model"])))
 
         return model
 
@@ -240,6 +250,27 @@ class MultiLabelHeadFactory(CustomHeadFactory):
             batch_size=self.config["hyperparameters"]["batch_size"],
             **self.config["training"]["optimizer_parameters"],
         )
+
+    def create_metric_computer(self) -> tuple[multilabel_head_metrics.MultiLabelHeadMetricComputer, dict[str, bool]]:
+        dataset: MultiLabelHeadDataset = self.create_dataset("validation")
+
+        dataloader: DataLoader = DataLoader(
+            dataset,
+            batch_size=self.config["hyperparameters"]["batch_size"],
+            collate_fn=self.create_collator(),
+        )
+
+        metric_computer: multilabel_head_metrics.MultiLabelHeadMetricComputer = \
+            multilabel_head_metrics.MultiLabelHeadMetricComputer(
+                self.config["validation"]["threshold"],
+                dataloader,
+                torch.device("cpu"),
+                self.config["validation"]["confidence_interval"],
+                self.config["validation"]["interval_type"],
+                self.config["validation"]["confidence_level"],
+            )
+
+        return (metric_computer, self.config["validation"]["metrics"])
 
 
 @head
@@ -394,3 +425,24 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
         )
 
         return used_callbacks
+
+    def create_metric_computer(self) -> tuple[multilabel_head_metrics.EncoderDecoderHeadMetricComputer, dict[str, bool]]:
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
+
+        dataset: EncoderDecoderDataset = self.create_dataset("validation")
+
+        dataloader: DataLoader = DataLoader(
+            dataset,
+            batch_size=self.config["hyperparameters"]["batch_size"],
+            collate_fn=self.create_collator(),
+        )
+
+        metric_computer: multilabel_head_metrics.EncoderDecoderHeadMetricComputer = \
+            multilabel_head_metrics.EncoderDecoderHeadMetricComputer(
+                dataloader,
+                torch.device("cpu"),
+                tokenizer,
+                self.config["hyperparameters"]["seq_len"],
+            )
+
+        return (metric_computer, self.config["validation"]["metrics"])
