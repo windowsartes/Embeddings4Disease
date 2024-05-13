@@ -1,14 +1,23 @@
+import math
 import warnings
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
+import scipy.stats as ss  # type: ignore[import-untyped]
 import torch
 import torch.nn.functional as F
 import transformers
 import typing as tp
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+
+@dataclass
+class ConfidenceInterval:
+    estimation: float
+    interval: tuple[float, float]
 
 
 METRIC_REGISTER: dict[str, tp.Callable[[npt.NDArray[np.float64], npt.NDArray[np.float64]], float]] = {}
@@ -24,8 +33,13 @@ class MetricComputerInterface(ABC):
     Base class for the metric computer. It contains the metrics we support. In the case you want to add new metric just
     implement it there and mark it with the 'metric' decorator defined above.
     """
+    def __init__(self) -> None:
+        self._confidence_interval: bool = False
+        self._interval_type: tp.Optional[str] = None
+        self._confidence_level: float = 0.95
+
     @abstractmethod
-    def get_metrics_value(self, *args, **kwargs) -> dict[str, float]:  # type: ignore
+    def get_metrics_value(self, *args, **kwargs) -> dict[str, float] | dict[str, ConfidenceInterval]:  # type: ignore
         pass
 
     @metric
@@ -116,6 +130,73 @@ class MetricComputerInterface(ABC):
 
         return ((1 + beta**2) * precision * recall) / ((beta**2) * precision + recall + eps)
 
+    def _get_point_estimation(
+        self,
+        metrics_storage: dict[str, list[float]]
+    ) -> dict[str, float]:
+        metrics_value: dict[str, float] = {}
+
+        for metric in metrics_storage:
+            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+
+        return metrics_value
+
+    def _get_confidence_interval(
+        self,
+        metrics_storage: dict[str, list[float]],
+    ) -> dict[str, ConfidenceInterval]:
+        n_resamples: int = 10000
+
+        metrics_value: dict[str, ConfidenceInterval] = {}
+
+        for metric in metrics_storage:
+            data = metrics_storage[metric]
+            data_bootstrapped = np.random.choice(data, size=(n_resamples, len(data)))
+
+            point_estimation = np.mean(data)
+            bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
+
+            if self._interval_type == "normal":
+                bootstrap_estimations_std = np.std(bootstrap_estimations, ddof=1)
+                quantile = ss.norm.ppf((1 + self._confidence_level) / 2, loc=0, scale=1)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    float(round(point_estimation, 4)),
+                    (
+                        float(round(point_estimation - quantile * bootstrap_estimations_std, 4)),
+                        float(round(point_estimation + quantile * bootstrap_estimations_std, 4))
+                    ),
+                )
+
+            elif self._interval_type == "quantile":
+                bootstrap_estimations_sorted = sorted(bootstrap_estimations)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    float(round(point_estimation, 4)),
+                    (
+                        float(round(bootstrap_estimations_sorted[math.floor(n_resamples * \
+                            ((1 - self._confidence_level) / 2))], 4)),
+                        float(round(bootstrap_estimations_sorted[math.ceil(n_resamples * \
+                            ((1 + self._confidence_level) / 2))], 4)),
+                    ),
+                )
+            else:
+                bootstrap_estimations_sorted = sorted(bootstrap_estimations)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    float(round(point_estimation, 4)),
+                    (
+                        float(round(2 * point_estimation - \
+                            bootstrap_estimations_sorted[math.ceil(n_resamples * \
+                                ((1 + self._confidence_level) / 2))], 4)),
+                        float(round(2 * point_estimation - \
+                            bootstrap_estimations_sorted[math.floor(n_resamples * \
+                                ((1 - self._confidence_level) / 2))], 4)),
+                    ),
+                )
+
+        return metrics_value
+
 
 class MultiLabelHeadMetricComputer(MetricComputerInterface):
     def __init__(
@@ -123,16 +204,23 @@ class MultiLabelHeadMetricComputer(MetricComputerInterface):
         threshold: float,
         dataloader: DataLoader,
         device: torch.device,
+        confidence_interval: bool = False,
+        interval_type: tp.Optional[str] = None,
+        confidence_level: float = 0.95,
     ):
         self.threshold: float = threshold
         self.dataloader: DataLoader = dataloader
         self.device: torch.device = device
 
+        self._confidence_interval: bool = confidence_interval
+        self._interval_type: tp.Optional[str] = interval_type
+        self._confidence_level: float = confidence_level
+
     def get_metrics_value(
         self,
         model: torch.nn.Module,
         metrics_to_use: dict[str, bool],
-    ) -> dict[str, float]:
+    ) -> dict[str, float] | dict[str, ConfidenceInterval]:
         """
         Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
         at the instance initialization.
@@ -173,12 +261,15 @@ class MultiLabelHeadMetricComputer(MetricComputerInterface):
                         metrics_storage[metric].append(METRIC_REGISTER[metric](answer.numpy(), predicted_tokens))
             progress_bar.close()
 
-        metrics_value: dict[str, float] = {}
+        if self._confidence_interval and self._interval_type not in ["quantile", "normal", "central"]:
+            warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
+                          "Only point estimation will be returned.")
+            return self._get_point_estimation(metrics_storage)
 
-        for metric in metrics_storage:
-            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+        if not self._confidence_interval:
+            return self._get_point_estimation(metrics_storage)
 
-        return metrics_value
+        return self._get_confidence_interval(metrics_storage)
 
 
 class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
@@ -188,6 +279,9 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
         device: torch.device,
         tokenizer: transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast,
         max_length: int,
+        confidence_interval: bool = False,
+        interval_type: tp.Optional[str] = None,
+        confidence_level: float = 0.95,
     ):
         self.dataloader: DataLoader = dataloader
         self.device: torch.device = device
@@ -197,11 +291,15 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
 
         self.max_length: int = max_length
 
+        self._confidence_interval: bool = confidence_interval
+        self._interval_type: tp.Optional[str] = interval_type
+        self._confidence_level: float = confidence_level
+
     def get_metrics_value(
         self,
         model: torch.nn.Module,
         metrics_to_use: dict[str, bool],
-    ) -> dict[str, float]:
+    ) -> dict[str, float] | dict[str, ConfidenceInterval]:
         """
         Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
         at the instance initialization.
@@ -280,9 +378,12 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
                         ))
             progress_bar.close()
 
-        metrics_value: dict[str, float] = {}
+        if self._confidence_interval and self._interval_type not in ["quantile", "normal", "central"]:
+            warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
+                          "Only point estimation will be returned.")
+            return self._get_point_estimation(metrics_storage)
 
-        for metric in metrics_storage:
-            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+        if not self._confidence_interval:
+            return self._get_point_estimation(metrics_storage)
 
-        return metrics_value
+        return self._get_confidence_interval(metrics_storage)
