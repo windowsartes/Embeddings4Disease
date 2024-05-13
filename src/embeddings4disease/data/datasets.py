@@ -5,6 +5,7 @@ import random
 from filelock import FileLock
 
 import torch
+import transformers
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -337,3 +338,46 @@ class MultiLabelHeadDataset(Dataset):
         target_one_hot = target_one_hot.sum(dim=0).float()
 
         return source_seq_str, target_one_hot
+
+
+class EncoderDecoderDataset(Dataset):
+    def __init__(self,
+                 path: pathlib.Path | str,
+                 tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+                 max_length: int):
+        super().__init__()
+
+        self._tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self._max_length: int = max_length
+
+        with open(path, "r") as input_file:
+            self.pairs: list[str] = input_file.readlines()
+
+    def __len__(self) -> int:
+        return len(self.pairs)
+
+    def __getitem__(self, index: int) -> transformers.BatchEncoding:
+        source_str, target_str = self.pairs[index].strip().split(",")
+
+        model_inputs = self._tokenizer(
+            source_str,
+            text_target=target_str,
+            max_length=self._max_length,
+            truncation=True,
+        )
+
+        return model_inputs
+
+
+class SourceTargetStringsDataset(Dataset):
+    def __init__(self, path: pathlib.Path | str):
+        with open(path, "r") as input_file:
+            self.pairs: list[str] = input_file.readlines()
+
+    def __len__(self) -> int:
+        return len(self.pairs)
+
+    def __getitem__(self, index: int) -> tuple[str, str]:
+        source_str, target_str = self.pairs[index].strip().split(",")
+
+        return source_str, target_str

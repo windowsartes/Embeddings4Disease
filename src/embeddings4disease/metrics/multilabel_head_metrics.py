@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn.functional as F
+import transformers
 import typing as tp
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -167,10 +168,116 @@ class MultiLabelHeadMetricComputer(MetricComputerInterface):
 
                 predictions: npt.NDArray[np.float64] = (probabilities > self.threshold).float().detach().cpu().numpy()
 
-
                 for answer, predicted_tokens in zip(batch_answers, predictions):
                     for metric in metrics_storage:
                         metrics_storage[metric].append(METRIC_REGISTER[metric](answer.numpy(), predicted_tokens))
+            progress_bar.close()
+
+        metrics_value: dict[str, float] = {}
+
+        for metric in metrics_storage:
+            metrics_value[metric] = float(np.mean(metrics_storage[metric]))
+
+        return metrics_value
+
+
+class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
+    def __init__(
+        self,
+        dataloader: DataLoader,
+        device: torch.device,
+        tokenizer: transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast,
+        max_length: int,
+    ):
+        self.dataloader: DataLoader = dataloader
+        self.device: torch.device = device
+
+        self.tokenizer: transformers.PreTrainedTokenizer | transformers.PreTrainedTokenizerFast = tokenizer
+        self.vocab: dict[str, str] = tokenizer.get_vocab()
+
+        self.max_length: int = max_length
+
+    def get_metrics_value(
+        self,
+        model: torch.nn.Module,
+        metrics_to_use: dict[str, bool],
+    ) -> dict[str, float]:
+        """
+        Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
+        at the instance initialization.
+
+        Args:
+            model (PreTrainedModel): model you want to evaluate.
+            metrics_to_use (dict[str, bool]): metrics you want to use during inference. In the case some metric you've
+            passed in this dictionary doesn't supported, it'll be ignored.
+
+        Returns:
+            dict[str, float]: average metrics' values during evaluation.
+        """
+        metrics_storage: dict[str, list[float]] = {}
+        for metric, usage in metrics_to_use.items():
+            if usage:
+                if metric not in METRIC_REGISTER:
+                    warnings.warn(
+                        f"There is no {metric} in the supported metrics so it will be ignored",
+                        SyntaxWarning
+                    )
+                else:
+                    metrics_storage[metric] = []
+
+        with torch.no_grad():
+            progress_bar = tqdm(self.dataloader)
+            for source_strings, target_strings in progress_bar:
+                progress_bar.set_description("Computing metrics")
+
+                device = next(model.parameters()).device
+
+                encoded_input = self.tokenizer(
+                    source_strings,
+                    padding='longest',
+                    max_length=self.max_length,
+                    truncation=True,
+                    return_tensors="pt",
+                ).to(device)
+
+                decoder_input = self.tokenizer(
+                    source_strings,
+                    padding='longest',
+                    max_length=self.max_length,
+                    truncation=True,
+                    return_tensors="pt",
+                ).to(device)
+
+                answer_batch = self.tokenizer(
+                    target_strings,
+                    return_tensors="np",
+                ).input_ids
+
+                model_predictions = model.generate(
+                    input_ids=encoded_input["input_ids"],
+                    decoder_input_ids=decoder_input["input_ids"],
+                    max_length=self.max_length + 1,
+                )
+
+                for answer, predicted_tokens in zip(answer_batch, model_predictions.cpu()):
+                    for _, special_token in self.tokenizer.special_tokens_map.items():
+                        predicted_tokens = predicted_tokens[predicted_tokens != self.vocab[special_token]]
+                        answer = answer[answer != self.vocab[special_token]]
+
+                    answer_one_hot: torch.Tensor = torch.nn.functional.one_hot(
+                        torch.tensor(answer).long(), num_classes=len(self.vocab),
+                    ).sum(dim=0).float()
+
+                    predictions_one_hot: torch.Tensor = torch.nn.functional.one_hot(
+                        predicted_tokens.long(),
+                        num_classes=len(self.vocab),
+                    ).sum(dim=0).float()
+
+                    for metric in metrics_storage:
+                        metrics_storage[metric].append(METRIC_REGISTER[metric](
+                            answer_one_hot.numpy(),
+                            predictions_one_hot.numpy()
+                        ))
             progress_bar.close()
 
         metrics_value: dict[str, float] = {}

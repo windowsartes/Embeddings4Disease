@@ -22,9 +22,10 @@ except ImportError:
 else:
     wandb_installed = True
 
-from embeddings4disease.data.datasets import CustomLineByLineDataset
+from embeddings4disease.data.datasets import SourceTargetStringsDataset, CustomLineByLineDataset
 from embeddings4disease.data.collators import MaskingCollator
 from embeddings4disease.metrics.backbone_metrics import MLMMetricComputer
+from embeddings4disease.metrics.multilabel_head_metrics import EncoderDecoderHeadMetricComputer
 from embeddings4disease.utils import utils
 
 
@@ -210,6 +211,8 @@ class MetricComputerCallback(TrainerCallback):
                             pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
                         ))
 
+                        plt.close(fig)
+
             if wandb_installed and self.use_wandb:
                 wandb.log({f"eval/{metric_name}": metrics[metric_name] for metric_name, usage in self.use_metrics.items() if usage})
 
@@ -288,5 +291,173 @@ class SaveLossHistoryCallback(TrainerCallback):
             plt.legend()
 
             plt.savefig(self.loss_storage_dir.joinpath("loss.png"))
+
+            plt.close(fig)
+
+        return control
+
+class EncoderDecoderMetricComputerCallback(TrainerCallback):
+    def __init__(
+        self,
+        path_to_data: str | pathlib.Path,
+        metrics_storage_dir: str | pathlib.Path,
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        use_metrics: dict[str, bool],
+        device: torch.device,
+        period: int = 10,
+        batch_size: int = 1024,
+        seq_len: int = 24,
+        use_wandb: bool = False,
+        save_plot: bool = True,
+    ):
+        super().__init__()
+
+        self.metrics_storage_dir: pathlib.Path = pathlib.Path(metrics_storage_dir)
+        utils.create_dir(self.metrics_storage_dir)
+
+        self.period: int = period
+
+        self.device: torch.device = device
+
+        self.use_metrics: dict[str, bool] = use_metrics
+        self.use_wandb: bool = use_wandb
+        self.save_plot: bool = save_plot
+
+        if self.save_plot:
+            sns.set_style("white")
+            sns.set_palette("bright")
+
+        for metric, usage in self.use_metrics.items():
+            if usage:
+                self.__initialize_metric_storage(metric)
+
+        dataset: Dataset = SourceTargetStringsDataset(path_to_data)
+
+        dataloader: DataLoader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+        )
+
+        self.metric_computer: EncoderDecoderHeadMetricComputer = EncoderDecoderHeadMetricComputer(
+            dataloader,
+            device,
+            tokenizer,
+            seq_len,
+        )
+
+    def __initialize_metric_storage(self, metric_name: str) -> None:
+        """
+        For every metric there is its own file; this method initialize it with empty object.
+
+        Args:
+            metric_name (str): metric's name; it will be used as a filename.
+        """
+        self.__dump_logs(metric_name, {})
+
+    def __dump_logs(self, metric_name: str, logs: dict[str, float]) -> None:
+        """
+        Dumps metric's loggs to its log file.
+
+        Args:
+            metric_name (str): metric's name.
+            logs (dict[int, float]): metric's logs.
+        """
+        utils.create_dir(pathlib.Path(self.metrics_storage_dir).joinpath(
+            pathlib.Path(metric_name)))
+
+        file_name: pathlib.Path = pathlib.Path(self.metrics_storage_dir).joinpath(
+            pathlib.Path(metric_name).joinpath(f"{metric_name}.json")
+        )
+
+        with open(file_name, "w") as file:
+            json.dump(logs, file)
+
+    def __load_logs(self, metric_name: str) -> dict[str, float]:
+        """
+        Loads metric's logs from its log file.
+
+        Args:
+            metric_name (str):  metric's name.
+
+        Returns:
+            dict[str, float]: metric's logs.
+        """
+        file_name: pathlib.Path = pathlib.Path(self.metrics_storage_dir).joinpath(
+            pathlib.Path(metric_name).joinpath(f"{metric_name}.json")
+        )
+
+        with open(file_name, "r") as file:
+            logs: dict[str, float] = json.load(file)
+
+        return logs
+
+    def on_evaluate(  # type: ignore
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs,
+    ) -> TrainerControl:
+        """
+        This method will be called by Trainer on evaluation phase.
+        Using MetricComputer it will compute metric you've selected in use_metrics argument and log them.
+
+        Args:
+            args (TrainingArguments): Trainer's TrainingArguments; see docs for more details.
+            state (TrainerState): Trainer's TrainerState; see docs for more details.
+            control (TrainerControl): Trainer's TrainerControl; see docs for more details.
+
+        Returns:
+            TrainerControl: Trainer's TrainerControl.
+        """
+        if (state.epoch - 1) % self.period == 0:
+            metrics: dict[str, float] = self.metric_computer.get_metrics_value(
+                kwargs["model"].to("cpu"),
+                self.use_metrics
+            )
+
+            kwargs["model"].to(self.device)
+
+            for metric_name, usage in self.use_metrics.items():
+                if usage:
+                    logs = self.__load_logs(metric_name)
+                    logs[state.epoch] = metrics[metric_name]
+
+                    self.__dump_logs(metric_name, logs)
+
+                    if self.save_plot:
+                        sns.set()
+
+                        x_ticks: list[int] = [
+                            int(float(value)) for value in list(logs.keys())
+                        ]
+                        values: list[float] = list(logs.values())
+
+                        fig = plt.figure()
+                        ax = fig.add_subplot(1, 1, 1)
+
+                        ax.yaxis.set_minor_locator(AutoMinorLocator())
+
+                        ax.tick_params(which="major", length=7)
+                        ax.tick_params(which="minor", length=4, color="r")
+
+                        ax.grid(which="minor", alpha=0.2)
+                        ax.grid(which="major", alpha=0.5)
+
+                        plt.xticks(rotation=45)
+
+                        ax.plot(x_ticks, values)
+
+                        plt.title(f"Value of {metric_name} on validation")
+                        plt.xlabel("Epoch")
+
+                        plt.savefig(self.metrics_storage_dir.joinpath(
+                            pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
+                        ))
+
+                        plt.close(fig)
+
+            if wandb_installed and self.use_wandb:
+                wandb.log({f"eval/{metric_name}": metrics[metric_name] for metric_name, usage in self.use_metrics.items() if usage})
 
         return control

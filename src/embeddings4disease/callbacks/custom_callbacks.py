@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
-from torch.utils.data import DataLoader
 
 from embeddings4disease.metrics.multilabel_head_metrics import MultiLabelHeadMetricComputer
 from embeddings4disease.trainer.training_args import TrainingArgs
@@ -18,17 +17,19 @@ class CustomCallback:
     def __init__(self, *args, **kwargs) -> None:  # type: ignore
         pass
 
-    def on_evaluate(self,
+    def on_evaluate(self,  # type: ignore
                     training_state: TrainingState,
                     training_args: TrainingArgs,
                     model: nn.Module,
+                    **kwargs,
                    ) -> None:
         pass
 
-    def on_save(self,
+    def on_save(self,  # type: ignore
                 training_state: TrainingState,
                 model: torch.nn.Module,
                 optimizer: torch.optim.Optimizer,
+                **kwargs,
                ) -> None:
         pass
 
@@ -38,7 +39,6 @@ class MetricComputerCallback(CustomCallback):
             self,
             metrics_storage_dir: str | pathlib.Path,
             use_metrics: dict[str, bool],
-            dataloader: DataLoader,
             device: torch.device,
             period: int = 10,
             threshold: float = 0.5,
@@ -56,6 +56,9 @@ class MetricComputerCallback(CustomCallback):
         self.use_metrics: dict[str, bool] = use_metrics
         self.save_plot: bool = save_plot
 
+        self.threshold: float = threshold
+        self.device: torch.device = device
+
         if self.save_plot:
             sns.set_style("white")
             sns.color_palette("bright")
@@ -63,10 +66,6 @@ class MetricComputerCallback(CustomCallback):
         for metric, usage in self.use_metrics.items():
             if usage:
                 self.__initialize_metric_storage(metric)
-
-        self.metric_computer: MultiLabelHeadMetricComputer = MultiLabelHeadMetricComputer(
-            threshold, dataloader, device
-        )
 
     def __initialize_metric_storage(self, metric_name: str) -> None:
         """
@@ -114,10 +113,11 @@ class MetricComputerCallback(CustomCallback):
 
         return logs
 
-    def on_evaluate(self,
+    def on_evaluate(self,  # type: ignore
                     training_state: TrainingState,
                     training_args: TrainingArgs,
                     model: nn.Module,
+                    **kwargs,
                    ) -> None:
         """
         Computes metrics' values during the validation. Optionall this method will draw a plots with metrics values
@@ -129,7 +129,13 @@ class MetricComputerCallback(CustomCallback):
             model (nn.Module): model you want to evaluate.
         """
         if training_state.epoch % self.period == 0:
-            metrics: dict[str, float] = self.metric_computer.get_metrics_value(
+            metric_computer: MultiLabelHeadMetricComputer = MultiLabelHeadMetricComputer(
+                self.threshold,
+                kwargs["dataloader"],
+                self.device,
+            )
+
+            metrics: dict[str, float] = metric_computer.get_metrics_value(
                 model, self.use_metrics
             )
 
@@ -141,6 +147,8 @@ class MetricComputerCallback(CustomCallback):
                     self.__dump_logs(metric_name, logs)
 
                     if self.save_plot:
+                        sns.set()
+
                         x_ticks: list[int] = [
                             int(float(value)) for value in list(logs.keys())
                         ]
@@ -164,10 +172,13 @@ class MetricComputerCallback(CustomCallback):
                         plt.title(f"Value of {metric_name} on validation")
                         plt.xlabel("Epoch")
 
-                        plt.savefig(self.metrics_storage_dir.joinpath(
-                                        pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
-                                    )
-                                   )
+                        plt.savefig(
+                            self.metrics_storage_dir.joinpath(
+                                pathlib.Path(metric_name).joinpath(f"{metric_name}.png")
+                            )
+                        )
+
+                        plt.close(fig)
 
 
 class SaveLossHistoryCallback(CustomCallback):
@@ -183,10 +194,11 @@ class SaveLossHistoryCallback(CustomCallback):
             sns.set_style("white")
             sns.color_palette("bright")
 
-    def on_evaluate(self,
+    def on_evaluate(self,  # type: ignore
                     training_state: TrainingState,
                     training_args: TrainingArgs,
                     model: nn.Module,
+                    **kwargs,
                    ) -> None:
         """
         Stores loss history on train and validation to the json file. Optionally this method can draw a plots
@@ -204,6 +216,8 @@ class SaveLossHistoryCallback(CustomCallback):
             json.dump(training_state.eval_loss_history, f)
 
         if self.save_plot:
+            sns.set()
+
             loss_train_history = list(training_state.train_loss_history.values())
             loss_val_history = list(training_state.eval_loss_history.values())
 
@@ -231,6 +245,8 @@ class SaveLossHistoryCallback(CustomCallback):
 
             plt.savefig(self.loss_storage_dir.joinpath("loss.png"))
 
+            plt.close(fig)
+
 
 class CheckpointCallback(CustomCallback):
     def __init__(self, checkpoint_storage_dir: str | pathlib.Path):
@@ -239,10 +255,11 @@ class CheckpointCallback(CustomCallback):
         self.checkpoint_storage_dir: pathlib.Path = pathlib.Path(checkpoint_storage_dir)
         utils.create_dir(checkpoint_storage_dir)
 
-    def on_save(self,
+    def on_save(self,  # type: ignore
                 training_state: TrainingState,
                 model: torch.nn.Module,
-                optimizer: torch.optim.Optimizer
+                optimizer: torch.optim.Optimizer,
+                **kwargs,
                ) -> None:
         """
         Saves given model and optimizer at the end of every epoch.
@@ -258,6 +275,7 @@ class CheckpointCallback(CustomCallback):
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
         }
+
         torch.save(checkpoint, self.checkpoint_storage_dir.joinpath("checkpoint.pth"))
 
 
@@ -268,10 +286,11 @@ class SaveBestModelCallback(CustomCallback):
         self.checkpoint_storage_dir: pathlib.Path = pathlib.Path(checkpoint_storage_dir)
         utils.create_dir(checkpoint_storage_dir)
 
-    def on_save(self,
+    def on_save(self,  # type: ignore
                 training_state: TrainingState,
                 model: torch.nn.Module,
-                optimizer: torch.optim.Optimizer
+                optimizer: torch.optim.Optimizer,
+                **kwargs,
                ) -> None:
         """
         Saves given model in the case its eval loss if lesser than the stored one.
@@ -282,10 +301,12 @@ class SaveBestModelCallback(CustomCallback):
             optimizer (torch.optim.Optimizer): optimiezer you want to save. Will be ignored.
         """
         eval_loss_last_value: float = list(training_state.eval_loss_history.values())[-1]
+
         if training_state.eval_loss_best_value > eval_loss_last_value:
             training_state.eval_loss_best_value = eval_loss_last_value
 
             checkpoint = {
                 "model": model.state_dict(),
             }
+
             torch.save(checkpoint, self.checkpoint_storage_dir.joinpath("checkpoint.pth"))
