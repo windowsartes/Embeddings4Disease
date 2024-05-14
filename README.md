@@ -1,102 +1,101 @@
 # Embeddings4Disease
 
-## Description
+## Описание
 
 TBA
 
-## Table of Contents
+## Содержание
 
 - [Embeddings4Disease](#embeddings4disease)
-  - [Description](#description)
-  - [Table of Contents](#table-of-contents)
-  - [How to install](#how-to-install)
-  - [Usage](#usage)
-    - [CLI for training](#cli-for-training)
-    - [CLI for validation](#cli-for-validation)
-    - [CLI for preprocessing](#cli-for-preprocessing)
-  - [Additional examples](#additional-examples)
-  - [Tests](#tests)
+  - [Описание](#описание)
+  - [Содержание](#содержание)
+  - [Установка](#установка)
+  - [Использование](#использование)
+    - [CLI для обучения](#cli-для-обучения)
+    - [CLI для валидации](#cli-для-валидации)
+    - [CLI для предобработки](#cli-для-предобработки)
+  - [Дополнительные примеры](#дополнительные-примеры)
+  - [Тесты](#тесты)
 
-## How to install
+## Установка
 
-To install a package from this repository, just write in the terminal:
+Чтобы установить пакет из этого репозитория, достаточно написать в терминале:
 
 ```bash
 pip install git+https://github.com/windowsartesEmbeddings4Disease.git
 ```
 
-In the case the master branch doen't have any features, you can install this package using any other branch:
+Если каких-то изменений ещё нет в master-ветке, то можно установить пакет из любой другой ветки при помощи:
 
 ```bash
 pip install git+https://github.com/windowsartes/Embeddings4Disease.git@branch
 ```
 
-Where «branch» is a the name of the branch you need.
+Где «branch» - название нужной вам ветки.
 
-For example, to install the package version from the development branch, you need to execute:
+Например, чтобы установить версию пакеты из ветки «development», нужно выполнить 
 
 ```bash
 pip install git+https://github.com/windowsartes/Embeddings4Disease.git@development
 ```
 
-Also there are some optional dependencies in out package. For example, there are optional dependencies for Weights and Biases logging and for RoFormer architecture usage.
-To install some optional dependencies, execute this command:
+Помимо этого, в нашем проекте есть опциональные зависимости, например, для визуализации или использования архитектуры RoFormer. Чтобы установить какие-то опциональные зависимости, выполните следующую команду:
 
 ```bash
 pip install "Embeddings4Disease[optional dependencies] @ git+https://github.com/windowsartes/Embeddings4Disease.git
 ```
 
-Instead of «optional dependencies» you just need to list dependencies names separated by commas. In the [pyptoject](./pyproject.toml) you can find all the optional dependencies.
+Где вместо «optional dependencies» перечислены через запятую названия наборов зависимостей. Их полный список вы можете найти в [pyptoject'е](./pyproject.toml).
 
-For example, to allow wandb intageration and get the opportunity to use RoFormer architecture, just execute:
-
-```bash
-pip install "Embeddings4Disease[wandb,roformer] @ git+https://github.com/windowsartes/Embeddings4Disease.git
-```
-
-Once you install the module in your virtual environment, you can use it like any other installed package and also use the CLI.
-
-## Usage
-
-Our project has a CLI within which utilities for training and validating models are implemented.
-Scripts will be generated and added automatically after installing the packages in the virtual environment. The CLI works entirely based on the config you give it. You can find examples of various configs [there](./config_examples/).
-
-### CLI for training
-To train a backbone model, execute this command:
+Например, чтобы получить возможно использовать RoFormer и использовать проверку типов, линтер и автоформатор, нужно выполнить
 
 ```bash
-train_backbone *path-to-config*
+pip install "Embeddings4Disease[roformer,development] @ git+https://github.com/windowsartes/Embeddings4Disease.git
 ```
 
-Path to the config must be relative to your current working directory or it must be absolute. Also all the pathes inside this config must be relative to your current working directory or absolute. Config examples and their full descriptions you can find [there](./config_examples/train/).
+Установив модуль в своё виртуальное окружение, вы сможете использовать его, как любой другой устанавливаемый пакет, а также использовать CLI.
 
-### CLI for validation
+## Использование
 
-Also there is a CLI for the model validation:
+В нашем проекте есть CLI в рамках которого реализованы утилиты для обучения и валидации моделей.
+Скрипты будут сгенерированы и добавлены автоматически после установки пакеты в виртуальное окружение. CLI полностью работает на основе конфига, который вы ему подадите. Примеры различных конфигов вы можете найти [здесь](./config_examples/).
+
+### CLI для обучения
+
+Чтобы запустить обучение модели, выполните команду:
 
 ```bash
-validate_backbone *path-to-config*
+training *путь-до-конфига*
 ```
 
-As during training, the path to the config file must be specified relative to the current directory or it must be an absolute path. Examples and descriptions you can find [there](./config_examples/validate/).
+Путь до конфига следует указывать относительно той директории, из которой вы запускаете скрипт. Примеры конфигов для обучения с их подробным описанием вы найдёте [здесь](./config_examples/training/).
 
-### CLI for preprocessing
+### CLI для валидации
 
-The training and validation CLIs expect the data to be in the specific format: one transaction on one line. To bring the data into this format and also be able to create a tokenizer using a dictionary file, we have a CLI to pre-process the data.
+Также нами реализован CLI для валидации моделей:
 
 ```bash
-preprocess *path-to-config*
+validation *путь-до-конфига*
 ```
 
-Details for creating the config, as well as an example for preprocessing MIMIC-4, you can find [there](./config_examples/preprocess/).
+Как и при обучении, путь до конфиг-файла необходимо указывать относительно текущей директории. Примеры и описание вы можете найти [здесь](./config_examples/validation/)
 
-## Additional examples
+### CLI для предобработки
 
-In [this colab-notebook](https://colab.research.google.com/drive/1xc87kcnBKP5s_thYbfkAgiiIgiNhzBY7?usp=sharing)
-you can find an example of CLI usage for the model pre-training.
+CLI для обучения и для обучения ожидают, что данные будут в формате одной транзакции на одной строке. Чтобы привести данные к такому виду, а также иметь возможность создать токенайзер при помощи vocab-файла, у нас есть CLI для предобработки данных.
 
-In [this colab-notebook](https://colab.research.google.com/drive/1UPCCeCHfk88UQ6eW-i-VtZ5sH2jmL9Jc?usp=sharing) you can find an example of CLI usage for the model validation.
+```bash
+preprocessing *путь-до-конфига*
+```
 
-## Tests
+Детали создания конфига, а также пример для предобработки MIMIC-4 вы можете найти [здесь](./config_examples/preprocessing/).
 
-CLI was fully tested on Windows 11, Ubuntu 22.04 via WSL, Ubuntu 20.04 and inside google colab.
+## Дополнительные примеры
+
+В [этом colab-блокноте](https://colab.research.google.com/drive/1xc87kcnBKP5s_thYbfkAgiiIgiNhzBY7?usp=sharing) вы найдёте пример использования CLI для обучения модели с нуля.
+
+А в [этом colab-блокноте](https://colab.research.google.com/drive/1UPCCeCHfk88UQ6eW-i-VtZ5sH2jmL9Jc?usp=sharing) вы найдёте пример использования валидации через CLI.
+
+## Тесты
+
+CLI был полностью протестирован на Windows 11, Ubuntu 22.04 через WSL, Ubuntu 20.04 и в гугл-колабе.
