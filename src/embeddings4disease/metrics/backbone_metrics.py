@@ -9,6 +9,7 @@ import numpy as np
 import scipy.stats as ss  # type: ignore[import-untyped]
 import torch
 from transformers import PreTrainedTokenizer, PreTrainedModel
+from transformers.models.bert.modeling_bert import BertForPreTrainingOutput
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -319,13 +320,21 @@ class MLMMetricComputer(MetricComputerInterface):
 
                 results: list[list[FillMaskPipelineResult]] = []
 
-                for i in range(outputs.logits.shape[0]):
+                if type(outputs) == BertForPreTrainingOutput:
+                    shape: int = outputs.prediction_logits.shape[0]
+                else:
+                    shape = outputs.logits.shape[0]
+
+                for i in range(shape):
                     masked_index = torch.nonzero(
                         batch_inputs["input_ids"][i] == self.tokenizer.mask_token_id,
                         as_tuple=False,
                     )
 
-                    logits = outputs.logits[i, masked_index[0].item(), :]
+                    if type(outputs) == BertForPreTrainingOutput:
+                        logits = outputs.prediction_logits[i, masked_index[0].item(), :]
+                    else:
+                        logits = outputs.logits[i, masked_index[0].item(), :]
                     probabilities = logits.softmax(dim=0)
 
                     top_probabilities, top_predicted_tokens = probabilities.topk(
