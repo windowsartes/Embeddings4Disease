@@ -168,11 +168,11 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                                  "validation",
                                 )
 
-    def create_vocab(self) -> None:
+    def create_vocab(self, dataset_type: str) -> None:
         vocab: set[str] = set()
 
         with (
-            open(self.storage_dir.joinpath(pathlib.Path("mlm").joinpath("train_transactions.txt")), "r") as train_file,
+            open(self.storage_dir.joinpath(pathlib.Path(f"{dataset_type}").joinpath("train_transactions.txt")), "r") as train_file,
             open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
         ):
             progress_bar: std.tqdm = tqdm(train_file)
@@ -322,7 +322,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
             subject_ids: list[int] = list(set(dataframe["subject_id"]))
 
             progress_bar: std.tqdm = tqdm(subject_ids)
-            progress_bar.set_description(f"Creating mlm {label} dataset")
+            progress_bar.set_description(f"Creating nsp {label} dataset")
             for index, subject_id in enumerate(progress_bar):
                 subject_transactions: pd.DataFrame = dataframe[dataframe["subject_id"] == subject_id]
 

@@ -8,7 +8,7 @@ from embeddings4disease.preprocessing import abstract_factory
 def preprocess(config_path: str) -> None:
     factory = abstract_factory.AbstractFactory().create(config_path)
     factory.create_mlm_dataset()
-    factory.create_vocab()
+    factory.create_vocab("mlm")
 
 
 if __name__ == "__main__":
