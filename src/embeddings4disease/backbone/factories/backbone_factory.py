@@ -355,6 +355,61 @@ class BERTFactory(BackboneFactory):
 
 
 @backbone
+class BERTWithNSPFactory(BERTFactory):
+    def __init__(self, config: dict[str, tp.Any]):
+        super().__init__(config)
+
+    def create_model(self) -> transformers.BertForPreTraining:
+        tokenizer: transformers.BertTokenizer = self.create_tokenizer()
+
+        if self.config["model"]["use_pretrained"]:
+            if self.config["model"]["path_to_saved_weights"] is None:
+                model: transformers.BertForPreTraining = (
+                    transformers.BertForPreTraining.from_pretrained("windowsartes/bert_with_nsp")
+                )
+            else:
+                model = transformers.BertForPreTraining.from_pretrained(
+                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                )
+        else:
+            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            config: transformers.BertConfig = transformers.BertConfig(
+                vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
+                max_position_embeddings=2*seq_len + 3,
+                **self.config["model"]["config"],
+            )
+            model = transformers.BertForPreTraining(config=config)
+
+        return model
+
+    def create_dataset(self, mode: str) -> datasets.CustomTextDatasetForNextSentencePrediction:
+        """
+        This method can be used to create a training or validation dataset.
+        All you need is to specify proper 'mode' value so factory can find proper information in the config.
+
+        Args:
+            mode (str): mode can be either 'validation' or 'training'
+
+        Returns:
+            LineByLineTextDataset: line by line dataset.
+        """
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
+            self.create_tokenizer()
+        )
+
+        seq_len: int = self.config["hyperparameters"]["seq_len"]
+
+        dataset: datasets.CustomTextDatasetForNextSentencePrediction = \
+            datasets.CustomTextDatasetForNextSentencePrediction(
+                tokenizer=tokenizer,
+                seq_len=seq_len,
+                file_path=os.path.abspath(self.config[mode]["path_to_data"]),
+                block_size=2*seq_len + 3,
+            )
+
+        return dataset
+
+@backbone
 class ConvBERTFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
