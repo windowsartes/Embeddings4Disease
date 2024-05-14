@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "embeddings4disease"
-version = "0.2.1"
+version = "0.2.2"
 
 authors = [
   {name = "Lipkovich Mikhail"},
@@ -170,6 +170,7 @@ plugins = [
 [[tool.mypy.overrides]]
 module = [
     "transformers",
+    "transformers.models.bert.modeling_bert",
     "pytorch_warmup",
 ]
 ignore_missing_imports = true
