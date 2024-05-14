@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "embeddings4disease"
-version = "0.0.1"
+version = "0.2.2"
 
 authors = [
   {name = "Lipkovich Mikhail"},
@@ -22,10 +22,11 @@ keywords = ["TBA"]
 
 
 dependencies = [
-  "accelerate>=0.21.0",
+  "accelerate >= 0.21.0",
   "click",
   "matplotlib",
   "seaborn",
+  "pytorch-warmup >= 0.1.1",
   "PyYAML >= 6.0.1",
   "torch",
   "transformers >= 4.38.2",
@@ -35,6 +36,10 @@ dependencies = [
 [project.optional-dependencies]
 roformer = [
   "rjieba"
+]
+
+wandb = [
+  "wandb"
 ]
 
 development = [
@@ -48,9 +53,13 @@ development = [
 ]
 
 [project.scripts]
-training = "cli.training:training"
-validation = "cli.validation:validation"
-preprocessing = "cli.preprocessing:preprocessing"
+preprocess_mlm = "embeddings4disease.cli.preprocess_mlm:preprocess"
+preprocess_seq2seq = "embeddings4disease.cli.preprocess_seq2seq:preprocess"
+train_backbone = "embeddings4disease.cli.train_backbone:train"
+train_miltilabel_head = "embeddings4disease.cli.train_multilabel_head:train"
+train_encoderdecoder_head = "embeddings4disease.cli.train_encoderdecoder_head:train"
+validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
+validate_baseline = "embeddings4disease.cli.validate_baseline:validate"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -71,6 +80,9 @@ exclude = [
     "dist",
     "node_modules",
     "site-packages",
+    "./*/__init__.py",
+    "./*/*/__init__.py",
+    "./*/*/*/__init__.py",
 ]
 
 # Same as Black.
@@ -149,9 +161,16 @@ warn_return_any = true
 warn_unreachable = true
 allow_untyped_globals = false
 allow_redefinition = false
+exclude = "./tests/"
+plugins = [
+  "numpy.typing.mypy_plugin",
+]
+
 
 [[tool.mypy.overrides]]
 module = [
     "transformers",
+    "transformers.models.bert.modeling_bert",
+    "pytorch_warmup",
 ]
 ignore_missing_imports = true

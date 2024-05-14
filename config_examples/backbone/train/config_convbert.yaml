@@ -1,0 +1,44 @@
+model:
+ type: ConvBERT
+ use_pretrained: false
+ path_to_saved_weights: null
+ config:
+  hidden_size: 384
+  num_attention_heads: 12
+  num_hidden_layers: 12
+tokenizer:
+ use_pretrained: false
+ path_to_saved_tokenizer: null
+ path_to_vocab_file: data/preprocessed/vocab.txt
+hyperparameters:
+ batch_size: 512
+ seq_len: 24
+training:
+ device: cuda:0
+ path_to_data: data/preprocessed/mlm/train_transactions.txt
+ n_epochs: 100
+ n_warmup_epochs: 50
+ n_checkpoints: 1
+ optimizer_parameters:
+  learning_rate: 0.0002
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  weight_decay: 0.01
+validation:
+ path_to_data: data/preprocessed/mlm/validation_transactions.txt
+ period: 10
+ top_k: 10
+ save_graphs: true
+ metrics: 
+  reciprocal_rank: true
+  simplified_dcg: true
+  precision: false
+  recall: false
+  f_score: false
+  hits: true
+  confidence: true
+save_trained_model: true
+wandb:
+ use: true
+ project: convbert
+ api_key: your-api-key

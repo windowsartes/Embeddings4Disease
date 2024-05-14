@@ -1,8 +1,0 @@
-dataset: MIMIC
-data_dir: data/mimic
-storage_dir: data/preprocessed
-code_length: 3
-code_lower_bound: "A"
-code_upper_bound: "N"
-epsilon: 0.333
-random_seed: 3452
