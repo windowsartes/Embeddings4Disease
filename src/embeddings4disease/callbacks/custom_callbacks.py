@@ -7,7 +7,7 @@ import torch.nn as nn
 from matplotlib import pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
 
-from embeddings4disease.metrics.multilabel_head_metrics import MultiLabelHeadMetricComputer, ConfidenceInterval
+from embeddings4disease.metrics.multilabel_head_metrics import MultiLabelHeadMetricComputer
 from embeddings4disease.trainer.training_args import TrainingArgs
 from embeddings4disease.trainer.training_state import TrainingState
 from embeddings4disease.utils import utils
