@@ -40,5 +40,5 @@ validation:
 save_trained_model: true
 wandb:
  use: true
- project: bert
+ project: bert_with_nsp
  api_key: your-api-key
