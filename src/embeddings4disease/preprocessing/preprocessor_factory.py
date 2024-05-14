@@ -56,6 +56,16 @@ class PreprocessorFactory(ABC):
         """
         pass
 
+    @abstractmethod
+    def create_nsp_dataset(self) -> None:
+        """
+        _summary_
+
+        Returns:
+            _type_: _description_
+        """
+        pass
+
 
 PREPROCESSOR_REGISTER: dict[str, tp.Type[PreprocessorFactory]] = {}
 
@@ -175,6 +185,75 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                         vocab.add(token)
                         vocab_file.write(token + "\n")
 
+    def create_nsp_dataset(self) -> None:
+        storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("nsp"))
+        utils.create_dir(storage_dir)
+
+        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["diagnoses"]))
+        diagnoses = diagnoses[diagnoses.icd_version == 10]
+        diagnoses = self._preprocess_codes(
+            diagnoses,
+            self.config["code_length"],
+            self.config["code_lower_bound"],
+            self.config["code_upper_bound"],
+        )
+
+        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["admissions"]))
+        admissions.admittime = utils.str2datetime(admissions.admittime)
+
+        threshold_date: datetime = parser.parse(self.config["threshold_date"])
+
+        admissions_train: pd.DataFrame = admissions[admissions.admittime < threshold_date]
+        admissions_validation: pd.DataFrame = admissions[admissions.admittime >= threshold_date]
+
+        del admissions
+
+        train_dataframe: pd.DataFrame = diagnoses.merge(admissions_train, on=["hadm_id", "subject_id"])
+        validation_dataframe: pd.DataFrame = diagnoses.merge(admissions_validation, on=["hadm_id", "subject_id"])
+
+        del diagnoses
+
+        self._nsp_dataframe2file(storage_dir.joinpath("train_transactions.txt"),
+                                 train_dataframe,
+                                 "train",
+                                )
+
+        self._nsp_dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
+                                 validation_dataframe,
+                                 "validation",
+                                )
+
+    def _mlm_dataframe2file(self,
+                            path: str | pathlib.Path,
+                            dataframe: pd.DataFrame,
+                            label: str,
+                           ) -> None:
+        """
+        Converts preprocessed pandas Dataframe into the txt file.
+
+        Args:
+            path (str | pathlib.Path): path to file where the data will be stored.
+            dataframe (pd.DataFrame): dataframe you want to convert.
+            label (str): label will be used as a tqdm bar description. By design, it can be either 'trainin' or 'validation'.
+        """
+        with open(path, "w") as file:
+            subject_ids: list[int] = list(set(dataframe["subject_id"]))
+
+            progress_bar: std.tqdm = tqdm(subject_ids)
+            progress_bar.set_description(f"Creating mlm {label} dataset")
+            for subject_id in progress_bar:
+                subject_transactions: pd.DataFrame = dataframe[dataframe["subject_id"] == subject_id]
+
+                unique_hadm_ids: utils.CustomOrderedSet = utils.CustomOrderedSet()
+                for hadm_id in list(subject_transactions["hadm_id"]):
+                    unique_hadm_ids.add(hadm_id)
+
+                hadm_ids: list[int] = [hadm_id for hadm_id in unique_hadm_ids]
+
+                for hadm_id in hadm_ids:
+                    unique_tokens = self._get_unique_tokens(subject_transactions, hadm_id)
+                    file.write(" ".join(unique_tokens) + "\n")
+
     def _seq2seq_dataframe2file(self,
                                 path: str | pathlib.Path,
                                 dataframe: pd.DataFrame,
@@ -226,7 +305,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
                             file.write(" ".join(source_diseases) + "," + " ".join(target_diseases) + "\n")
 
-    def _mlm_dataframe2file(self,
+    def _nsp_dataframe2file(self,
                             path: str | pathlib.Path,
                             dataframe: pd.DataFrame,
                             label: str,
@@ -244,7 +323,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
             progress_bar: std.tqdm = tqdm(subject_ids)
             progress_bar.set_description(f"Creating mlm {label} dataset")
-            for subject_id in progress_bar:
+            for index, subject_id in enumerate(progress_bar):
                 subject_transactions: pd.DataFrame = dataframe[dataframe["subject_id"] == subject_id]
 
                 unique_hadm_ids: utils.CustomOrderedSet = utils.CustomOrderedSet()
@@ -255,7 +334,12 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
                 for hadm_id in hadm_ids:
                     unique_tokens = self._get_unique_tokens(subject_transactions, hadm_id)
-                    file.write(" ".join(unique_tokens) + "\n")
+                    if index != len(progress_bar) - 1:
+                        file.write(" ".join(unique_tokens) + "\n")
+                    else:
+                        file.write(" ".join(unique_tokens))
+                if index != len(progress_bar) - 1:
+                    file.write("\n")
 
     @staticmethod
     def _get_unique_tokens(

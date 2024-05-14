@@ -135,7 +135,7 @@ class MetricComputerCallback(CustomCallback):
                 self.device,
             )
 
-            metrics: dict[str, float] = metric_computer.get_metrics_value(
+            metrics: dict[str, float] = metric_computer.get_metrics_value(  # type: ignore[assignment]
                 model, self.use_metrics
             )
 
@@ -305,8 +305,4 @@ class SaveBestModelCallback(CustomCallback):
         if training_state.eval_loss_best_value > eval_loss_last_value:
             training_state.eval_loss_best_value = eval_loss_last_value
 
-            checkpoint = {
-                "model": model.state_dict(),
-            }
-
-            torch.save(checkpoint, self.checkpoint_storage_dir.joinpath("checkpoint.pth"))
+            torch.save(model.state_dict(), self.checkpoint_storage_dir.joinpath("checkpoint.pt"))

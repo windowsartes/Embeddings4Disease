@@ -1,7 +1,7 @@
 model:
  type: MultiLabel
- from_pretrained: false
- path_to_pretrained_model: null
+ from_pretrained: true
+ path_to_pretrained_model: MultiLabel/May-13-2024/18-02/best_model/checkpoint.pt
  backbone:
   from_huggingface: true
   path_to_saved_model: windowsartes/bert
@@ -19,23 +19,14 @@ tokenizer:
 hyperparameters:
  batch_size: 512
  seq_len: 24
-training:
- device: cuda:0
- path_to_data: data/preprocessed/seq2seq/train_transactions.txt
- n_epochs: 2
- n_warmup_epochs: 5
- optimizer_parameters:
-  learning_rate: 0.001
-  backbone_learning_rate: null
-  adam_beta1: 0.9
-  adam_beta2: 0.999
-  weight_decay: 0.01
 validation:
  path_to_data: data/preprocessed/seq2seq/validation_transactions.txt
- period: 1
  threshold: 0.25
+ confidence_interval: true
+ interval_type: central
+ confidence_level: 0.95
  save_graphs: true
- metrics:
+ metrics: 
   exact_match: false
   accuracy: true
   precision: true
