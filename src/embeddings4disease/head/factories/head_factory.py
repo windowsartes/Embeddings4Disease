@@ -174,7 +174,12 @@ class MultiLabelHeadFactory(CustomHeadFactory):
         )
 
         if self.config["model"]["from_pretrained"]:
-            model.load_state_dict(torch.load(os.path.abspath(self.config["model"]["path_to_pretrained_model"])))
+            model.load_state_dict(
+                torch.load(
+                    os.path.abspath(self.config["model"]["path_to_pretrained_model"]),
+                    map_location=torch.device(self.config["training"]["device"]),
+                )
+            )
 
         return model
 
