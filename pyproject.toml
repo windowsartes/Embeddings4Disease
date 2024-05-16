@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "embeddings4disease"
-version = "0.2.2"
+version = "0.2.3"
 
 authors = [
   {name = "Lipkovich Mikhail"},
@@ -61,7 +61,7 @@ train_miltilabel_head = "embeddings4disease.cli.train_multilabel_head:train"
 train_encoderdecoder_head = "embeddings4disease.cli.train_encoderdecoder_head:train"
 validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
 validate_baseline = "embeddings4disease.cli.validate_baseline:validate"
-validate_multilabel_head = "embeddings4disease.cli.alidate_multilabel_head:validate"
+validate_multilabel_head = "embeddings4disease.cli.validate_multilabel_head:validate"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
