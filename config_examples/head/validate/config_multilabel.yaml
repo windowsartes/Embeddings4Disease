@@ -19,6 +19,8 @@ tokenizer:
 hyperparameters:
  batch_size: 512
  seq_len: 24
+training:
+ device: cpu
 validation:
  path_to_data: data/preprocessed/seq2seq/validation_transactions.txt
  threshold: 0.25
