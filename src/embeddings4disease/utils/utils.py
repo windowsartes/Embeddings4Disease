@@ -18,37 +18,39 @@ class CodeCutter:
         code_length (int, optional): number of first characters to leave. Defaults to 3.
     """
     def __init__(self, code_length: int = 3) -> None:
-        self.code_length: int = code_length
+        self.__code_length: int = code_length
 
     def __call__(self, code: str) -> str:
-        return code[:self.code_length]
+        return code[:self.__code_length]
 
 
-class CustomOrderedSet:
+T = tp.TypeVar("T", bound=object)
+
+class CustomOrderedSet(tp.Generic[T]):
     """
     It's just a simle ordered set, based on python list.
     """
     def __init__(self) -> None:
-        self.storage: list[tp.Any] = []
+        self.__storage: list[T] = []
 
-    def add(self, value: tp.Any) -> None:
-        if value not in self.storage:
-            self.storage.append(value)
+    def add(self, value: T) -> None:
+        if value not in self.__storage:
+            self.__storage.append(value)
 
-    def __contains__(self, value: tp.Any) -> bool:
-        return value in self.storage
+    def __contains__(self, value: T) -> bool:
+        return value in self.__storage
 
-    def __iter__(self):  # type: ignore
-        self.current_index: int = 0
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        self.__current_index: int = 0
 
         return self
 
-    def __next__(self) -> tp.Any:
-        if self.current_index < len(self.storage):
-            x: tp.Any = self.storage[self.current_index]
-            self.current_index += 1
+    def __next__(self) -> T:
+        if self.__current_index < len(self.__storage):
+            current_value: T = self.__storage[self.__current_index]
+            self.__current_index += 1
 
-            return x
+            return current_value
 
         raise StopIteration
 
