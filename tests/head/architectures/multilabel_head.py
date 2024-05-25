@@ -36,7 +36,7 @@ test_data = [
 ]
 
 @pytest.mark.parametrize("use_dropout", test_data)
-def test_linear_block_use_normalization(use_dropout: bool):
+def test_linear_block_use_dropout(use_dropout: bool):
     linear_block: LinearBlock = LinearBlock(4, 16, use_dropout=use_dropout)
 
     assert isinstance(linear_block.block.dropout, nn.Dropout1d) == use_dropout
