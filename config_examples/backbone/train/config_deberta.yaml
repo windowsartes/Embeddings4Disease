@@ -8,7 +8,8 @@ model:
   num_hidden_layers: 12
 tokenizer:
  use_pretrained: false
- path_to_saved_tokenizer: null
+ from_huggingface: true
+ path_to_saved_tokenizer: windowsartes/deberta_tokenizer_fast
  path_to_vocab_file: data/preprocessed/vocab.txt
 hyperparameters:
  batch_size: 512
