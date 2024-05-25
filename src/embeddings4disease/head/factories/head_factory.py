@@ -1,27 +1,31 @@
 import os
 import pathlib
+import shutil
 import typing as tp
 from abc import ABC, abstractmethod
 from datetime import datetime
+from math import ceil
 
 import torch
 import transformers
 from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers import AutoTokenizer, AutoModelForMaskedLM
+from transformers import GPT2Config, GPT2LMHeadModel
+from transformers import GenerationConfig
 
 from embeddings4disease.callbacks import custom_callbacks, hf_callbacks
 from embeddings4disease.head.architectures import multilabel_head
 from embeddings4disease.data.datasets import MultiLabelHeadDataset, EncoderDecoderDataset
 from embeddings4disease.data.collators import MultiLabelHeadCollator
-from embeddings4disease.metrics import multilabel_head_metrics
+from embeddings4disease.metrics import head_metrics
 from embeddings4disease.trainer.training_args import TrainingArgs
 from embeddings4disease.utils import utils
 
 
 class HeadFactory(ABC):
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        self._config: dict[str, tp.Any] = config
 
     @abstractmethod
     def initialize(self) -> None:
@@ -75,7 +79,7 @@ class HeadFactory(ABC):
         pass
 
     @abstractmethod
-    def create_metric_computer(self) -> tuple[multilabel_head_metrics.MetricComputerInterface, dict[str, bool]]:
+    def create_metric_computer(self) -> head_metrics.MetricComputerInterface:
         pass
 
     def _create_storage(self) -> None:
@@ -87,10 +91,10 @@ class HeadFactory(ABC):
         now = datetime.now()
         data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
 
-        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
+        storage_path = working_dir.joinpath(self._config["model"]["type"]).joinpath(data).joinpath(time)
         utils.create_dir(storage_path)
 
-        self.storage_path: pathlib.Path = storage_path
+        self._storage_path: pathlib.Path = storage_path
 
 
 class CustomHeadFactory(HeadFactory):
@@ -138,9 +142,20 @@ class HuggingFaceHeadFactory(HeadFactory):
     def create_callbacks(self) -> list[transformers.TrainerCallback]:
         pass
 
+    def set_warmup_epochs(
+        self,
+        training_args: transformers.TrainingArguments,
+        dataset_train: EncoderDecoderDataset
+    ) -> None:
+        batch_size: int = self._config["hyperparameters"]["batch_size"]
+        n_warmup_epochs: int = self._config["training"]["n_warmup_epochs"]
+
+        training_args.warmup_steps = (
+            ceil(len(dataset_train) / batch_size) * n_warmup_epochs
+        )
+
 
 HEAD_REGISTER: dict[str, tp.Type[HeadFactory]] = {}
-
 
 def head(cls: tp.Type[HeadFactory]) -> tp.Type[HeadFactory]:
     HEAD_REGISTER[cls.__name__[:-11]] = cls
@@ -158,46 +173,46 @@ class MultiLabelHeadFactory(CustomHeadFactory):
     def create_model(self) -> multilabel_head.MultiLabelHead:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
 
-        if self.config["model"]["backbone"]["from_huggingface"]:
+        if self._config["model"]["backbone"]["from_huggingface"]:
             backbone: AutoModelForMaskedLM = AutoModelForMaskedLM.from_pretrained(
-                self.config["model"]["backbone"]["path_to_saved_model"]
+                self._config["model"]["backbone"]["path_to_saved_model"]
             )
         else:
             backbone = AutoModelForMaskedLM.from_pretrained(
-                os.path.abspath(self.config["model"]["backbone"]["path_to_saved_model"])
+                os.path.abspath(self._config["model"]["backbone"]["path_to_saved_model"])
             )
 
         model = multilabel_head.MultiLabelHead(
             backbone,
             tokenizer.vocab_size,
-            **self.config["model"]["head"],
+            **self._config["model"]["head"],
         )
 
-        if self.config["model"]["from_pretrained"]:
+        if self._config["model"]["from_pretrained"]:
             model.load_state_dict(
                 torch.load(
-                    os.path.abspath(self.config["model"]["path_to_pretrained_model"]),
-                    map_location=torch.device(self.config["training"]["device"]),
+                    os.path.abspath(self._config["model"]["path_to_pretrained_model"]),
+                    map_location=torch.device(self._config["training"]["device"]),
                 )
             )
 
         return model
 
     def load_tokenizer(self) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
-        if self.config["tokenizer"]["from_huggingface"]:
+        if self._config["tokenizer"]["from_huggingface"]:
             return AutoTokenizer.from_pretrained(
-                self.config["tokenizer"]["path_to_saved_tokenizer"]
+                self._config["tokenizer"]["path_to_saved_tokenizer"]
             )
 
         return AutoTokenizer.from_pretrained(
-            os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+            os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
         )
 
     def create_dataset(self, mode: str) -> MultiLabelHeadDataset:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
 
         dataset: MultiLabelHeadDataset = MultiLabelHeadDataset(
-            os.path.abspath(self.config[mode]["path_to_data"]), tokenizer
+            os.path.abspath(self._config[mode]["path_to_data"]), tokenizer
         )
 
         return dataset
@@ -206,7 +221,7 @@ class MultiLabelHeadFactory(CustomHeadFactory):
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
 
         collator: MultiLabelHeadCollator = MultiLabelHeadCollator(
-            tokenizer, self.config["hyperparameters"]["seq_len"]
+            tokenizer, self._config["hyperparameters"]["seq_len"]
         )
 
         return collator
@@ -215,67 +230,68 @@ class MultiLabelHeadFactory(CustomHeadFactory):
         used_callbacks: list[custom_callbacks.CustomCallback] = []
 
         compute_metrics: bool = False
-        for value in self.config["validation"]["metrics"].values():
+        for value in self._config["validation"]["metrics"].values():
             if value:
                 compute_metrics = value
                 break
 
         if compute_metrics:
             device: torch.device = torch.device(
-                self.config["training"]["device"]
+                self._config["training"]["device"]
                 if torch.cuda.is_available()
                 else "cpu"
             )
 
             used_callbacks.append(
                 custom_callbacks.MetricComputerCallback(
-                    metrics_storage_dir=self.storage_path.joinpath("metrics"),
-                    use_metrics=self.config["validation"]["metrics"],
+                    metrics_storage_dir=self._storage_path.joinpath("metrics"),
+                    use_metrics=self._config["validation"]["metrics"],
                     device=device,
-                    period=self.config["validation"]["period"],
-                    threshold=self.config["validation"]["threshold"],
-                    save_plot=self.config["validation"]["save_graphs"],
+                    period=self._config["validation"]["period"],
+                    threshold=self._config["validation"]["threshold"],
+                    save_plot=self._config["validation"]["save_graphs"],
                 )
             )
 
-        used_callbacks.append(custom_callbacks.SaveLossHistoryCallback(self.storage_path.joinpath("loss"), True))
+        used_callbacks.append(custom_callbacks.SaveLossHistoryCallback(self._storage_path.joinpath("loss"), True))
 
-        used_callbacks.append(custom_callbacks.CheckpointCallback(self.storage_path.joinpath("checkpoint")))
-        used_callbacks.append(custom_callbacks.SaveBestModelCallback(self.storage_path.joinpath("best_model")))
+        used_callbacks.append(custom_callbacks.CheckpointCallback(self._storage_path.joinpath("checkpoint")))
+        used_callbacks.append(custom_callbacks.SaveBestModelCallback(self._storage_path.joinpath("best_model")))
 
         return used_callbacks
 
     def create_training_args(self) -> TrainingArgs:
         return TrainingArgs(
-            mode=self.config["model"]["head"]["mode"],
-            n_epochs=self.config["training"]["n_epochs"],
-            n_warmup_epochs=self.config["training"]["n_warmup_epochs"],
-            device=torch.device(self.config["training"]["device"]),
+            mode=self._config["model"]["head"]["mode"],
+            n_epochs=self._config["training"]["n_epochs"],
+            n_warmup_epochs=self._config["training"]["n_warmup_epochs"],
+            device=torch.device(self._config["training"]["device"]),
             criterion=torch.nn.BCEWithLogitsLoss,
-            batch_size=self.config["hyperparameters"]["batch_size"],
-            **self.config["training"]["optimizer_parameters"],
+            batch_size=self._config["hyperparameters"]["batch_size"],
+            **self._config["training"]["optimizer_parameters"],
         )
 
-    def create_metric_computer(self) -> tuple[multilabel_head_metrics.MultiLabelHeadMetricComputer, dict[str, bool]]:
+    def create_metric_computer(self) -> head_metrics.MultiLabelHeadMetricComputer:
         dataset: MultiLabelHeadDataset = self.create_dataset("validation")
 
         dataloader: DataLoader = DataLoader(
             dataset,
-            batch_size=self.config["hyperparameters"]["batch_size"],
+            batch_size=self._config["hyperparameters"]["batch_size"],
             collate_fn=self.create_collator(),
         )
 
-        metric_computer: multilabel_head_metrics.MultiLabelHeadMetricComputer = \
-            multilabel_head_metrics.MultiLabelHeadMetricComputer(
-                self.config["validation"]["threshold"],
+        metric_computer: head_metrics.MultiLabelHeadMetricComputer = \
+            head_metrics.MultiLabelHeadMetricComputer(
+                self._config["validation"]["threshold"],
                 dataloader,
                 torch.device("cpu"),
-                self.config["validation"]["confidence_interval"],
-                self.config["validation"]["interval_type"],
-                self.config["validation"]["confidence_level"],
+                self._config["validation"]["metrics"],
+                self._config["validation"]["confidence_interval"]["use"],
+                self._config["validation"]["confidence_interval"]["interval_type"],
+                self._config["validation"]["confidence_interval"]["confidence_level"],
             )
 
-        return (metric_computer, self.config["validation"]["metrics"])
+        return metric_computer
 
 
 @head
@@ -287,38 +303,61 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
         self._create_storage()
 
     def load_tokenizer(self) -> PreTrainedTokenizer | PreTrainedTokenizerFast:
-        if self.config["tokenizer"]["from_huggingface"]:
+        if self._config["tokenizer"]["from_huggingface"]:
             return AutoTokenizer.from_pretrained(
-                self.config["tokenizer"]["path_to_saved_tokenizer"]
+                self._config["tokenizer"]["path_to_saved_tokenizer"]
             )
 
         return AutoTokenizer.from_pretrained(
-            os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+            os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
         )
 
     def create_model(self) -> transformers.EncoderDecoderModel:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
 
-        if self.config["model"]["from_encoder_decoder"]:
-            if self.config["model"]["encode"]["from_huggingface"]:
-                path_to_saved_encoder: str = self.config["model"]["encode"]["path_to_saved_model"]
+        if self._config["model"]["from_encoder_decoder"]:
+            from_config: bool = False
+            if self._config["model"]["encoder"]["from_huggingface"]:
+                path_to_saved_encoder: str = self._config["model"]["encoder"]["path_to_saved_model"]
             else:
-                path_to_saved_encoder = os.path.abspath(self.config["model"]["encode"]["path_to_saved_model"])
+                path_to_saved_encoder = os.path.abspath(self._config["model"]["encoder"]["path_to_saved_model"])
 
-            if self.config["model"]["decoder"]["from_huggingface"]:
-                path_to_saved_decoder: str = self.config["model"]["decoder"]["path_to_saved_model"]
+            if self._config["model"]["decoder"]["from_pretrained"]:
+                if self._config["model"]["decoder"]["from_huggingface"]:
+                    path_to_saved_decoder: str | pathlib.Path = self._config["model"]["decoder"]["path_to_saved_model"]
+                else:
+                    path_to_saved_decoder = os.path.abspath(self._config["model"]["decoder"]["path_to_saved_model"])
             else:
-                path_to_saved_decoder = os.path.abspath(self.config["model"]["decoder"]["path_to_saved_model"])
+                decoder_config: GPT2Config = GPT2Config(
+                    vocab_size=len(tokenizer.get_vocab()),
+                    n_positions=self._config["hyperparameters"]["seq_len"],
+                    n_embd=self._config["model"]["decoder"]["config"]["embedding_size"],
+                    n_head=self._config["model"]["decoder"]["config"]["n_heads"],
+                    n_layer=self._config["model"]["decoder"]["config"]["n_layers"],
+                )
+                from_config = True
 
-            self._model = transformers.EncoderDecoderModel.from_encoder_decoder_pretrained(
-                path_to_saved_encoder,
-                path_to_saved_decoder,
-            )
+                decoder: GPT2LMHeadModel = GPT2LMHeadModel(config=decoder_config)
+
+                temp_dir: pathlib.Path = pathlib.Path(utils.get_cwd()).joinpath("_temp")
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                decoder.save_pretrained(temp_dir)
+
+                path_to_saved_decoder = temp_dir
+
+            self._model: transformers.EncoderDecoderModel = \
+                transformers.EncoderDecoderModel.from_encoder_decoder_pretrained(
+                    path_to_saved_encoder,
+                    path_to_saved_decoder,
+                )
+
+            if from_config:
+                shutil.rmtree(temp_dir)
         else:
-            if self.config["model"]["saved_model"]["from_huggingface"]:
-                path_to_saved_model: str = self.config["model"]["saved_model"]["path_to_saved_model"]
+            if self._config["model"]["saved_model"]["from_huggingface"]:
+                path_to_saved_model: str = self._config["model"]["saved_model"]["path_to_saved_model"]
             else:
-                path_to_saved_model = os.path.abspath(self.config["model"]["saved_model"]["path_to_saved_model"])
+                path_to_saved_model = os.path.abspath(self._config["model"]["saved_model"]["path_to_saved_model"])
 
             self._model = transformers.EncoderDecoderModel.from_pretrained(path_to_saved_model)
 
@@ -340,7 +379,7 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
 
     def create_collator(self) -> transformers.DataCollatorForSeq2Seq:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
-        max_length: int = self.config["hyperparameters"]["seq_len"]
+        max_length: int = self._config["hyperparameters"]["seq_len"]
 
         collator: transformers.DataCollatorForSeq2Seq = transformers.DataCollatorForSeq2Seq(
             tokenizer,
@@ -357,25 +396,36 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
         )
 
         dataset: EncoderDecoderDataset = EncoderDecoderDataset(
-            path=os.path.abspath(self.config[mode]["path_to_data"]),
+            path=os.path.abspath(self._config[mode]["path_to_data"]),
             tokenizer=tokenizer,
-            max_length=self.config["hyperparameters"]["seq_len"],
+            max_length=self._config["hyperparameters"]["seq_len"],
         )
 
         return dataset
 
     def create_training_args(self) -> transformers.Seq2SeqTrainingArguments:
-        checkpoint_path: pathlib.Path = self.storage_path.joinpath("checkpoint")
+        checkpoint_path: pathlib.Path = self._storage_path.joinpath("checkpoint")
 
         utils.create_dir(checkpoint_path)
         utils.delete_files(checkpoint_path)
 
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
+
+        generation_config: GenerationConfig = GenerationConfig(
+            max_new_tokens = self._config["hyperparameters"]["seq_len"],
+            pad_token_id = tokenizer.pad_token_id,
+            # do_sample = True,
+            decoder_start_token_id = tokenizer.cls_token_id,
+            # num_beams = 2,
+            # top_k = 5,
+        )
+
         args = transformers.Seq2SeqTrainingArguments(
             output_dir=str(checkpoint_path),
             overwrite_output_dir=True,
-            num_train_epochs=self.config["training"]["n_epochs"],
-            per_device_train_batch_size=self.config["hyperparameters"]["batch_size"],
-            per_device_eval_batch_size=self.config["hyperparameters"]["batch_size"]*2,
+            num_train_epochs=self._config["training"]["n_epochs"],
+            per_device_train_batch_size=self._config["hyperparameters"]["batch_size"],
+            per_device_eval_batch_size=self._config["hyperparameters"]["batch_size"],
             evaluation_strategy="epoch",
             logging_strategy="epoch",
             save_strategy="epoch",
@@ -386,7 +436,8 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
             max_grad_norm=1.0,
             predict_with_generate=True,
             fp16=True,
-            prediction_loss_only=True,
+            prediction_loss_only=False,
+            generation_config = generation_config,
         )
 
         return args
@@ -394,60 +445,40 @@ class EncoderDecoderHeadFactory(HuggingFaceHeadFactory):
     def create_callbacks(self) -> list[transformers.TrainerCallback]:
         used_callbacks = []
 
+        used_callbacks.append(
+            hf_callbacks.SaveLossHistoryCallback(
+                loss_storage_dir=self._storage_path.joinpath("loss"),
+                save_plot=self._config["validation"]["save_graphs"],
+            )
+        )
+
+        metrics_to_use: dict[str, bool] = self._config["validation"]["metrics"]
+
         compute_metrics: bool = False
-        for value in self.config["validation"]["metrics"].values():
+        for value in metrics_to_use.values():
             if value:
                 compute_metrics = value
                 break
 
         if compute_metrics:
-            device: torch.device = torch.device(
-                self.config["training"]["device"]
-                if torch.cuda.is_available()
-                else "cpu"
-            )
-
             used_callbacks.append(
-                hf_callbacks.EncoderDecoderMetricComputerCallback(
-                    path_to_data=self.config["validation"]["path_to_data"],
-                    metrics_storage_dir=self.storage_path.joinpath("metrics"),
-                    tokenizer=self.load_tokenizer(),
-                    use_metrics=self.config["validation"]["metrics"],
-                    device=device,
-                    period=self.config["validation"]["period"],
-                    batch_size=self.config["hyperparameters"]["batch_size"],
-                    seq_len=self.config["hyperparameters"]["seq_len"],
-                    use_wandb=False,
-                    save_plot=self.config["validation"]["save_graphs"],
+                hf_callbacks.EncoderDecoderMetricPlotsCallback(
+                    metrics_storage_dir=self._storage_path.joinpath("metrics"),
+                    use_metrics=metrics_to_use,
+                    save_plot=self._config["validation"]["save_graphs"],
                 )
             )
 
-        used_callbacks.append(
-            hf_callbacks.SaveLossHistoryCallback(
-                loss_storage_dir=self.storage_path.joinpath("loss"),
-                save_plot=self.config["validation"]["save_graphs"],
-            )
-        )
-
         return used_callbacks
 
-    def create_metric_computer(self) -> tuple[multilabel_head_metrics.EncoderDecoderHeadMetricComputer, dict[str, bool]]:
-        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = self.load_tokenizer()
-
-        dataset: EncoderDecoderDataset = self.create_dataset("validation")
-
-        dataloader: DataLoader = DataLoader(
-            dataset,
-            batch_size=self.config["hyperparameters"]["batch_size"],
-            collate_fn=self.create_collator(),
+    def create_metric_computer(self) -> head_metrics.EncoderDecoderHeadMetricComputer:
+        metric_computer: head_metrics.EncoderDecoderHeadMetricComputer = \
+            head_metrics.EncoderDecoderHeadMetricComputer(
+            tokenizer=self.load_tokenizer(),
+            metrics_to_use=self._config["validation"]["metrics"],
+            confidence_interval=self._config["validation"]["confidence_interval"]["use"],
+            interval_type=self._config["validation"]["confidence_interval"]["interval_type"],
+            confidence_level=self._config["validation"]["confidence_interval"]["confidence_level"],
         )
 
-        metric_computer: multilabel_head_metrics.EncoderDecoderHeadMetricComputer = \
-            multilabel_head_metrics.EncoderDecoderHeadMetricComputer(
-                dataloader,
-                torch.device("cpu"),
-                tokenizer,
-                self.config["hyperparameters"]["seq_len"],
-            )
-
-        return (metric_computer, self.config["validation"]["metrics"])
+        return metric_computer
