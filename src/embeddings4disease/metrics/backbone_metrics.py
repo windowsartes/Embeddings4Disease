@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 import scipy.stats as ss  # type: ignore[import-untyped]
 import torch
-from transformers import PreTrainedTokenizer, PreTrainedModel
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast, PreTrainedModel
 from transformers.models.bert.modeling_bert import BertForPreTrainingOutput
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -30,6 +30,7 @@ METRIC_REGISTER: dict[str, tp.Callable[[str, list[str], list[float]], float]] = 
 
 def metric(function: tp.Callable[[str, list[str], list[float]], float]) -> tp.Callable[[str, list[str], list[float]], float]:
     METRIC_REGISTER[function.__name__[9:]] = function
+
     return function
 
 
@@ -39,9 +40,9 @@ class MetricComputerInterface(ABC):
     implement it there and mark it with the 'metric' decorator defined above.
     """
     def __init__(self) -> None:
-        self._confidence_interval: bool = False
-        self._interval_type: tp.Optional[str] = None
-        self._confidence_level: float = 0.95
+        self.__use_confidence_interval: bool = False
+        self.__interval_type: tp.Optional[str] = None
+        self.__confidence_level: float = 0.95
 
     @abstractmethod
     def get_metrics_value(self, *args, **kwargs) -> dict[str, float] | dict[str, ConfidenceInterval]: # type: ignore
@@ -172,6 +173,22 @@ class MetricComputerInterface(ABC):
 
         return 0.
 
+    @metric
+    @staticmethod
+    def _compute_hits(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
+        """
+        Computes HITS value on one example;
+
+        Args:
+            answer (str): true token's value.
+            predicted_tokens (list[str]): tokens you model has predicted.
+            tokens_probabilities (list[float]): probabilities of corresponding tokens.
+
+        Returns:
+            float: HITS' value.
+        """
+        return predicted_tokens.count(answer)
+
     def _get_point_estimation(
         self,
         metrics_storage: dict[str, list[float]]
@@ -198,9 +215,21 @@ class MetricComputerInterface(ABC):
             point_estimation = np.mean(data)
             bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
 
-            if self._interval_type == "normal":
+            if self.__interval_type == "with_std":
+                quantile = ss.norm.ppf((1 + self.__confidence_level) / 2, loc=0, scale=1)
+
+                std_estimation: float = np.std(bootstrap_estimations, ddof=1)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    float(round(point_estimation, 4)),
+                    (
+                        float(round(point_estimation - quantile * std_estimation / np.sqrt(len(data)), 4)),
+                        float(round(point_estimation + quantile * std_estimation / np.sqrt(len(data)), 4))
+                    ),
+                )
+            elif self.__interval_type == "normal":
                 bootstrap_estimations_std = np.std(bootstrap_estimations, ddof=1)
-                quantile = ss.norm.ppf((1 + self._confidence_level) / 2, loc=0, scale=1)
+                quantile = ss.norm.ppf((1 + self.__confidence_level) / 2, loc=0, scale=1)
 
                 metrics_value[metric] = ConfidenceInterval(
                     float(round(point_estimation, 4)),
@@ -210,16 +239,16 @@ class MetricComputerInterface(ABC):
                     ),
                 )
 
-            elif self._interval_type == "quantile":
+            elif self.__interval_type == "quantile":
                 bootstrap_estimations_sorted = sorted(bootstrap_estimations)
 
                 metrics_value[metric] = ConfidenceInterval(
                     float(round(point_estimation, 4)),
                     (
                         float(round(bootstrap_estimations_sorted[math.floor(n_resamples * \
-                            ((1 - self._confidence_level) / 2))], 4)),
+                            ((1 - self.__confidence_level) / 2))], 4)),
                         float(round(bootstrap_estimations_sorted[math.ceil(n_resamples * \
-                            ((1 + self._confidence_level) / 2))], 4)),
+                            ((1 + self.__confidence_level) / 2))], 4)),
                     ),
                 )
             else:
@@ -230,30 +259,14 @@ class MetricComputerInterface(ABC):
                     (
                         float(round(2 * point_estimation - \
                             bootstrap_estimations_sorted[math.ceil(n_resamples * \
-                                ((1 + self._confidence_level) / 2))], 4)),
+                                ((1 + self.__confidence_level) / 2))], 4)),
                         float(round(2 * point_estimation - \
                             bootstrap_estimations_sorted[math.floor(n_resamples * \
-                                ((1 - self._confidence_level) / 2))], 4)),
+                                ((1 - self.__confidence_level) / 2))], 4)),
                     ),
                 )
 
         return metrics_value
-
-    @metric
-    @staticmethod
-    def _compute_hits(answer: str, predicted_tokens: list[str], tokens_probabilities: list[float]) -> float:
-        """
-        Computes HITS value on one example;
-
-        Args:
-            answer (str): true token's value.
-            predicted_tokens (list[str]): tokens you model has predicted.
-            tokens_probabilities (list[float]): probabilities of corresponding tokens.
-
-        Returns:
-            float: HITS' value.
-        """
-        return predicted_tokens.count(answer)
 
 
 class MLMMetricComputer(MetricComputerInterface):
@@ -271,25 +284,29 @@ class MLMMetricComputer(MetricComputerInterface):
 
     def __init__(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
         top_k: int,
         dataloader: DataLoader,
+        metrics_to_use: dict[str, bool],
         confidence_interval: bool = False,
         interval_type: tp.Optional[str] = None,
         confidence_level: float = 0.95,
     ):
-        self.tokenizer: PreTrainedTokenizer = tokenizer
-        self.top_k: int = top_k
-        self.dataloader: DataLoader = dataloader
+        super().__init__()
 
-        self._confidence_interval: bool = confidence_interval
-        self._interval_type: tp.Optional[str] = interval_type
-        self._confidence_level: float = confidence_level
+        self.__tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self.__top_k: int = top_k
+        self.__dataloader: DataLoader = dataloader
+
+        self.__metrics_to_use: dict[str, bool] = metrics_to_use
+
+        self.__use_confidence_interval: bool = confidence_interval
+        self.__interval_type: tp.Optional[str] = interval_type
+        self.__confidence_level: float = confidence_level
 
     def get_metrics_value(
         self,
         model: PreTrainedModel,
-        metrics_to_use: dict[str, bool],
     ) -> dict[str, float] | dict[str, ConfidenceInterval]:
         """
         Base method for the model evaluation. It will computer metrics' values during the dataloader you've specified
@@ -304,7 +321,7 @@ class MLMMetricComputer(MetricComputerInterface):
             dict[str, float]: average metrics's values during evaluation.
         """
         metrics_storage: dict[str, list[float]] = {}
-        for metric, usage in metrics_to_use.items():
+        for metric, usage in self.__metrics_to_use.items():
             if usage:
                 if metric not in METRIC_REGISTER:
                     warnings.warn(
@@ -315,7 +332,10 @@ class MLMMetricComputer(MetricComputerInterface):
                     metrics_storage[metric] = []
 
         with torch.no_grad():
-            for batch_inputs, batch_answers in tqdm(self.dataloader):
+            progress_bar = tqdm(self.__dataloader)
+            progress_bar.set_description("Computing metrics")
+
+            for batch_inputs, batch_answers in progress_bar:
                 outputs = model(**batch_inputs)
 
                 results: list[list[FillMaskPipelineResult]] = []
@@ -327,7 +347,7 @@ class MLMMetricComputer(MetricComputerInterface):
 
                 for i in range(shape):
                     masked_index = torch.nonzero(
-                        batch_inputs["input_ids"][i] == self.tokenizer.mask_token_id,
+                        batch_inputs["input_ids"][i] == self.__tokenizer.mask_token_id,
                         as_tuple=False,
                     )
 
@@ -337,9 +357,7 @@ class MLMMetricComputer(MetricComputerInterface):
                         logits = outputs.logits[i, masked_index[0].item(), :]
                     probabilities = logits.softmax(dim=0)
 
-                    top_probabilities, top_predicted_tokens = probabilities.topk(
-                        self.top_k
-                    )
+                    top_probabilities, top_predicted_tokens = probabilities.topk(self.__top_k)
 
                     result: list[FillMaskPipelineResult] = []
 
@@ -350,7 +368,7 @@ class MLMMetricComputer(MetricComputerInterface):
                             {
                                 "score": probability,
                                 "token": predicted_token,
-                                "token_str": self.tokenizer.decode([predicted_token]),
+                                "token_str": self.__tokenizer.decode([predicted_token]),
                             }
                         )
 
@@ -367,12 +385,12 @@ class MLMMetricComputer(MetricComputerInterface):
                     for metric in metrics_storage:
                         metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
 
-        if self._confidence_interval and self._interval_type not in ["quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["with_std", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                           "Only point estimation will be returned.")
             return self._get_point_estimation(metrics_storage)
 
-        if not self._confidence_interval:
+        if not self.__use_confidence_interval:
             return self._get_point_estimation(metrics_storage)
 
         return self._get_confidence_interval(metrics_storage)
@@ -387,23 +405,25 @@ class Baseline(MetricComputerInterface):
         ):
         super().__init__()
 
-        counter: tp.DefaultDict[str, int] = defaultdict(int)
+        counter_dct: tp.DefaultDict[str, int] = defaultdict(int)
 
         with open(config["path_to_training_file"], "r") as training_file:
             for transaction in training_file:
                 tokens = transaction.strip().split(" ")
                 for token in tokens:
-                    counter[token] += 1
+                    counter_dct[token] += 1
 
-        number_of_tokens: int = sum(counter.values())
-        self._config: dict[str, tp.Any] = config
+        number_of_tokens: int = sum(counter_dct.values())
+        self.__config: dict[str, tp.Any] = config
 
-        self._confidence_interval: bool = self._config["confidence_interval"]
-        self._interval_type: tp.Optional[str] = self._config["interval_type"]
-        self._confidence_level: float = self._config["confidence_level"]
+        self.__use_confidence_interval: bool = self.__config["confidence_interval"]["use"]
+        self.__interval_type: tp.Optional[str] = self.__config["confidence_interval"]["interval_type"]
+        self.__confidence_level: float = self.__config["confidence_interval"]["confidence_level"]
 
-        self._counter: Counter[str] = Counter(dict(sorted(counter.items(), key=lambda item: item[1], reverse=True)))
-        self._top_k_predictions: dict[str, float] = {key: value/number_of_tokens for key, value in self._counter.most_common(config["top_k"])}
+        counter: Counter[str] = Counter(dict(sorted(counter_dct.items(), key=lambda item: item[1], reverse=True)))
+        self.__top_k_predictions: dict[str, float] = {
+            key: value/number_of_tokens for key, value in counter.most_common(config["top_k"])
+        }
 
     def get_metrics_value(
         self,
@@ -417,7 +437,7 @@ class Baseline(MetricComputerInterface):
         """
 
         metrics_storage: dict[str, list[float]] = {}
-        for metric, usage in self._config["metrics"].items():
+        for metric, usage in self.__config["metrics"].items():
             if usage:
                 if metric not in METRIC_REGISTER:
                     warnings.warn(
@@ -427,22 +447,31 @@ class Baseline(MetricComputerInterface):
                 else:
                     metrics_storage[metric] = []
 
-        predicted_tokens: list[str] = list(self._top_k_predictions.keys())
-        tokens_probabilities: list[float] = list(self._top_k_predictions.values())
+        predicted_tokens: list[str] = list(self.__top_k_predictions.keys())
+        tokens_probabilities: list[float] = list(self.__top_k_predictions.values())
 
-        with open(self._config["path_to_validation_file"], "r") as validation_file:
-            for input_sequence in validation_file:
+        with open(self.__config["path_to_validation_file"], "r") as validation_file:
+            progress_bar = tqdm(validation_file.readlines())
+            progress_bar.set_description("Computing metrics")
+
+            for input_sequence in progress_bar:
                 answer: str = input_sequence.strip().split(" ")[-1]
 
                 for metric in metrics_storage:
-                    metrics_storage[metric].append(METRIC_REGISTER[metric](answer, predicted_tokens, tokens_probabilities))
+                    metrics_storage[metric].append(
+                        METRIC_REGISTER[metric](
+                            answer,
+                            predicted_tokens,
+                            tokens_probabilities,
+                        )
+                    )
 
-        if self._confidence_interval and self._interval_type not in ["quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["standart", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                           "Only point estimation will be returned.")
             return self._get_point_estimation(metrics_storage)
 
-        if not self._confidence_interval:
+        if not self.__use_confidence_interval:
             return self._get_point_estimation(metrics_storage)
 
         return self._get_confidence_interval(metrics_storage)

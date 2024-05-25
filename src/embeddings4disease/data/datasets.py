@@ -19,11 +19,14 @@ class CustomLineByLineDataset(Dataset):
         path (str): path to data you want to use.
     """
 
-    def __init__(self, path: str | pathlib.Path):
+    def __init__(
+        self,
+        path: str | pathlib.Path
+    ):
         super().__init__()
 
         with open(path, "r") as input_file:
-            self.content: list[str] = input_file.readlines()
+            self._content: list[str] = input_file.readlines()
 
     def __len__(self) -> int:
         """
@@ -32,7 +35,7 @@ class CustomLineByLineDataset(Dataset):
         Returns:
             int: the number of stored transactions
         """
-        return len(self.content)
+        return len(self._content)
 
     def __getitem__(self, index: int) -> str:
         """
@@ -44,7 +47,7 @@ class CustomLineByLineDataset(Dataset):
         Returns:
             str: stripped transaction.
         """
-        return self.content[index].strip()
+        return self._content[index].strip()
 
 
 class CustomTextDatasetForNextSentencePrediction(Dataset):
@@ -69,9 +72,9 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
         if not os.path.isfile(file_path):
             raise ValueError(f"Input file path {file_path} not found")
 
-        self.seq_len: int = seq_len
-        self.short_seq_probability: float = short_seq_probability
-        self.nsp_probability: float = nsp_probability
+        self._seq_len: int = seq_len
+        self._short_seq_probability: float = short_seq_probability
+        self._nsp_probability: float = nsp_probability
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
@@ -79,7 +82,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
             f"cached_nsp_{tokenizer.__class__.__name__}_{block_size}_{filename}",
         )
 
-        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self._tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
 
         # Make sure only the first process in distributed training processes the dataset,
         # and the others will use the cache.
@@ -101,10 +104,10 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not overwrite_cache:
                 with open(cached_features_file, "rb") as handle:
-                    self.examples: list[dict[str, torch.Tensor]] = pickle.load(handle)
+                    self._examples: list[dict[str, torch.Tensor]] = pickle.load(handle)
 
             else:
-                self.documents: list[list[list[int]]] = [[]]
+                self._documents: list[list[list[int]]] = [[]]
                 with open(file_path, encoding="utf-8") as f:
                     while True:
                         line: str = f.readline()
@@ -113,27 +116,27 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         line = line.strip()
 
                         # Empty lines are used as document delimiters
-                        if not line and len(self.documents[-1]) != 0:
-                            self.documents.append([])
+                        if not line and len(self._documents[-1]) != 0:
+                            self._documents.append([])
                         tokens: list[int] = tokenizer.convert_tokens_to_ids(
                             tokenizer.tokenize(line)
                         )
                         if tokens:
-                            self.documents[-1].append(tokens)
+                            self._documents[-1].append(tokens)
 
-                self.examples = []
-                for doc_index, document in enumerate(self.documents):
+                self._examples = []
+                for doc_index, document in enumerate(self._documents):
                     self.create_examples_from_document(document, doc_index, block_size)
 
                 with open(cached_features_file, "wb") as handle:
-                    pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    pickle.dump(self._examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def create_examples_from_document(
         self, document: list[list[int]], doc_index: int, block_size: int
     ) -> None:
         """Creates examples for a single document."""
 
-        max_num_tokens: int = block_size - self.tokenizer.num_special_tokens_to_add(
+        max_num_tokens: int = block_size - self._tokenizer.num_special_tokens_to_add(
             pair=True
         )
 
@@ -145,7 +148,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length: int = max_num_tokens
-        if random.random() < self.short_seq_probability:
+        if random.random() < self._short_seq_probability:
             target_seq_length = random.randint(2, max_num_tokens)
 
         current_chunk: list[list[int]] = []  # a buffer stored current working segments
@@ -172,7 +175,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
 
                     if (
                         len(current_chunk) == 1
-                        or random.random() < self.nsp_probability
+                        or random.random() < self._nsp_probability
                     ):
                         is_random_next: bool = True
                         target_b_length: int = target_seq_length - len(tokens_a)
@@ -183,12 +186,12 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         # we're processing.
                         for _ in range(10):
                             random_document_index: int = random.randint(
-                                0, len(self.documents) - 1
+                                0, len(self._documents) - 1
                             )
                             if random_document_index != doc_index:
                                 break
 
-                        random_document: list[list[int]] = self.documents[
+                        random_document: list[list[int]] = self._documents[
                             random_document_index
                         ]
                         random_start: int = random.randint(0, len(random_document) - 1)
@@ -216,17 +219,17 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         )
 
                     # add special tokens
-                    tokens_a = list(dict.fromkeys(tokens_a))[: self.seq_len]
-                    tokens_b = list(dict.fromkeys(tokens_b))[: self.seq_len]
+                    tokens_a = list(dict.fromkeys(tokens_a))[: self._seq_len]
+                    tokens_b = list(dict.fromkeys(tokens_b))[: self._seq_len]
 
                     input_ids: list[int] = (
-                        self.tokenizer.build_inputs_with_special_tokens(
+                        self._tokenizer.build_inputs_with_special_tokens(
                             tokens_a, tokens_b
                         )
                     )
                     # add token type ids, 0 for sentence a, 1 for sentence b
                     token_type_ids: list[int] = (
-                        self.tokenizer.create_token_type_ids_from_sequences(
+                        self._tokenizer.create_token_type_ids_from_sequences(
                             tokens_a, tokens_b
                         )
                     )
@@ -241,7 +244,7 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
                         ),
                     }
 
-                    self.examples.append(example)
+                    self._examples.append(example)
 
                 current_chunk = []
                 current_length = 0
@@ -249,10 +252,10 @@ class CustomTextDatasetForNextSentencePrediction(Dataset):
             i += 1
 
     def __len__(self) -> int:
-        return len(self.examples)
+        return len(self._examples)
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
-        return self.examples[index]
+        return self._examples[index]
 
 
 class MultiLabelHeadDataset(Dataset):
@@ -276,18 +279,18 @@ class MultiLabelHeadDataset(Dataset):
         super().__init__()
 
         with open(path_to_data, "r") as input_file:
-            self.data = input_file.readlines()
+            self._data = input_file.readlines()
 
-        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self._tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
 
         # technical tokens are also included here, but if we remove them,
         # we'll have to change the indices after the model predictor,
         # and this will be quite inconvenient, but overall ok.
-        self.num_classes: int = tokenizer.vocab_size
+        self._num_classes: int = tokenizer.vocab_size
 
         # The idea is that UNK can be understood as some kind of disease that is not in the dictionary.
         # Then it may be logical to predict it.
-        self.predict_unk: bool = predict_unk
+        self._predict_unk: bool = predict_unk
 
     def __len__(self) -> int:
         """
@@ -296,7 +299,7 @@ class MultiLabelHeadDataset(Dataset):
         Returns:
             int: length of the dataset.
         """
-        return len(self.data)
+        return len(self._data)
 
     def __getitem__(self, index: int) -> tuple[str, torch.Tensor]:
         """
@@ -309,12 +312,12 @@ class MultiLabelHeadDataset(Dataset):
         Returns:
             tuple[str, torch.LongTensor]: sorce seq. as a string, new target seq. tokens as a one-hot vector.
         """
-        source_seq_str, target_seq_str = self.data[index].split(",")
+        source_seq_str, target_seq_str = self._data[index].split(",")
 
-        source_seq: list[str] = self.tokenizer.tokenize(source_seq_str)
-        target_seq: list[str] = self.tokenizer.tokenize(target_seq_str)
+        source_seq: list[str] = self._tokenizer.tokenize(source_seq_str)
+        target_seq: list[str] = self._tokenizer.tokenize(target_seq_str)
 
-        if self.predict_unk:
+        if self._predict_unk:
             target_tokens: str = " ".join(
                 [token for token in target_seq if token not in source_seq]
             )
@@ -323,17 +326,17 @@ class MultiLabelHeadDataset(Dataset):
                     token
                     for token in target_seq
                     if token not in source_seq
-                    and token in self.tokenizer.get_vocab()
-                    and token not in self.tokenizer.special_tokens_map
+                    and token in self._tokenizer.get_vocab()
+                    and token not in self._tokenizer.special_tokens_map
                 ]
             )
 
-        target_tokens_codes: list[int] = self.tokenizer.encode(target_tokens)[1:-1]
+        target_tokens_codes: list[int] = self._tokenizer.encode(target_tokens)[1:-1]
 
         target_tokens_codes_tensor: torch.Tensor = torch.tensor(target_tokens_codes).long()
 
         target_one_hot: torch.Tensor = torch.nn.functional.one_hot(
-            target_tokens_codes_tensor, num_classes=self.num_classes
+            target_tokens_codes_tensor, num_classes=self._num_classes
         )
         target_one_hot = target_one_hot.sum(dim=0).float()
 
@@ -341,23 +344,25 @@ class MultiLabelHeadDataset(Dataset):
 
 
 class EncoderDecoderDataset(Dataset):
-    def __init__(self,
-                 path: pathlib.Path | str,
-                 tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
-                 max_length: int):
+    def __init__(
+        self,
+        path: pathlib.Path | str,
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        max_length: int,
+    ):
         super().__init__()
 
         self._tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
         self._max_length: int = max_length
 
         with open(path, "r") as input_file:
-            self.pairs: list[str] = input_file.readlines()
+            self._pairs: list[str] = input_file.readlines()
 
     def __len__(self) -> int:
-        return len(self.pairs)
+        return len(self._pairs)
 
     def __getitem__(self, index: int) -> transformers.BatchEncoding:
-        source_str, target_str = self.pairs[index].strip().split(",")
+        source_str, target_str = self._pairs[index].strip().split(",")
 
         model_inputs = self._tokenizer(
             source_str,
@@ -370,14 +375,17 @@ class EncoderDecoderDataset(Dataset):
 
 
 class SourceTargetStringsDataset(Dataset):
-    def __init__(self, path: pathlib.Path | str):
+    def __init__(
+        self,
+        path: pathlib.Path | str,
+    ):
         with open(path, "r") as input_file:
-            self.pairs: list[str] = input_file.readlines()
+            self._pairs: list[str] = input_file.readlines()
 
     def __len__(self) -> int:
-        return len(self.pairs)
+        return len(self._pairs)
 
     def __getitem__(self, index: int) -> tuple[str, str]:
-        source_str, target_str = self.pairs[index].strip().split(",")
+        source_str, target_str = self._pairs[index].strip().split(",")
 
         return source_str, target_str

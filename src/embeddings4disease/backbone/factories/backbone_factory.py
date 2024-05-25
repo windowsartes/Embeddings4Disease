@@ -43,7 +43,7 @@ class BackboneFactory(ABC):
     """
 
     def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+        self._config: dict[str, tp.Any] = config
 
     @abstractmethod
     def create_model(self) -> PreTrainedModel:
@@ -81,18 +81,18 @@ class BackboneFactory(ABC):
         now = datetime.now()
         data, time = now.strftime("%b-%d-%Y %H:%M").replace(":", "-").split()
 
-        storage_path = working_dir.joinpath(self.config["model"]["type"]).joinpath(data).joinpath(time)
+        storage_path = working_dir.joinpath(self._config["model"]["type"]).joinpath(data).joinpath(time)
         utils.create_dir(storage_path)
 
-        self.storage_path: pathlib.Path = storage_path
+        self._storage_path: pathlib.Path = storage_path
 
     def _log_into_wandb(self) -> None:
         """
         This method is used to log into wandb.
         """
-        if wandb_installed and self.config["wandb"]["use"]:
-            wandb.login(key=self.config["wandb"]["api_key"])
-            wandb.init(project=self.config["wandb"]["project"])
+        if wandb_installed and self._config["wandb"]["use"]:
+            wandb.login(key=self._config["wandb"]["api_key"])
+            wandb.init(project=self._config["wandb"]["project"])
 
     def create_collator(self) -> DataCollatorForLanguageModeling:
         """
@@ -133,8 +133,8 @@ class BackboneFactory(ABC):
 
         dataset: LineByLineTextDataset = LineByLineTextDataset(
             tokenizer=tokenizer,
-            file_path=os.path.abspath(self.config[mode]["path_to_data"]),
-            block_size=self.config["hyperparameters"]["seq_len"] + 2,
+            file_path=os.path.abspath(self._config[mode]["path_to_data"]),
+            block_size=self._config["hyperparameters"]["seq_len"] + 2,
         )
 
         return dataset
@@ -152,14 +152,14 @@ class BackboneFactory(ABC):
         used_callbacks: list[transformers.TrainerCallback] = []
 
         compute_metrics: bool = False
-        for value in self.config["validation"]["metrics"].values():
+        for value in self._config["validation"]["metrics"].values():
             if value:
                 compute_metrics = value
                 break
 
         if compute_metrics:
             device: torch.device = torch.device(
-                self.config["training"]["device"]
+                self._config["training"]["device"]
                 if torch.cuda.is_available()
                 else "cpu"
             )
@@ -167,25 +167,25 @@ class BackboneFactory(ABC):
             used_callbacks.append(
                 hf_callbacks.MetricComputerCallback(
                     path_to_data=os.path.abspath(
-                        self.config["validation"]["path_to_data"]
+                        self._config["validation"]["path_to_data"]
                     ),
-                    metrics_storage_dir=self.storage_path.joinpath("metrics"),
+                    metrics_storage_dir=self._storage_path.joinpath("metrics"),
                     tokenizer=tokenizer,
-                    use_metrics=self.config["validation"]["metrics"],
+                    use_metrics=self._config["validation"]["metrics"],
                     device=device,
-                    period=self.config["validation"]["period"],
-                    top_k=self.config["validation"]["top_k"],
-                    batch_size=self.config["hyperparameters"]["batch_size"],
-                    seq_len=self.config["hyperparameters"]["seq_len"],
-                    use_wandb=wandb_installed and self.config["wandb"]["use"],
-                    save_plot=self.config["validation"]["save_graphs"],
+                    period=self._config["validation"]["period"],
+                    top_k=self._config["validation"]["top_k"],
+                    batch_size=self._config["hyperparameters"]["batch_size"],
+                    seq_len=self._config["hyperparameters"]["seq_len"],
+                    use_wandb=wandb_installed and self._config["wandb"]["use"],
+                    save_plot=self._config["validation"]["save_graphs"],
                 ),
             )
 
         used_callbacks.append(
             hf_callbacks.SaveLossHistoryCallback(
-                loss_storage_dir=self.storage_path.joinpath("loss"),
-                save_plot=self.config["validation"]["save_graphs"],
+                loss_storage_dir=self._storage_path.joinpath("loss"),
+                save_plot=self._config["validation"]["save_graphs"],
             )
         )
 
@@ -198,7 +198,7 @@ class BackboneFactory(ABC):
         Returns:
             TrainingArguments: training arg which will be later used by trainer.
         """
-        checkpoint_path: pathlib.Path = self.storage_path.joinpath("checkpoint")
+        checkpoint_path: pathlib.Path = self._storage_path.joinpath("checkpoint")
 
         utils.create_dir(checkpoint_path)
         utils.delete_files(checkpoint_path)
@@ -206,50 +206,51 @@ class BackboneFactory(ABC):
         training_args = TrainingArguments(
             output_dir=str(checkpoint_path),
             overwrite_output_dir=True,
-            num_train_epochs=self.config["training"]["n_epochs"],
-            per_device_train_batch_size=self.config["hyperparameters"]["batch_size"],
-            per_device_eval_batch_size=self.config["hyperparameters"]["batch_size"],
+            num_train_epochs=self._config["training"]["n_epochs"],
+            per_device_train_batch_size=self._config["hyperparameters"]["batch_size"],
+            per_device_eval_batch_size=self._config["hyperparameters"]["batch_size"],
             evaluation_strategy="epoch",
             logging_strategy="epoch",
             save_strategy="epoch",
-            save_total_limit=self.config["training"]["n_checkpoints"],
+            save_total_limit=self._config["training"]["n_checkpoints"],
             prediction_loss_only=True,
             lr_scheduler_type="cosine",
             max_grad_norm=1.0,
             report_to=(
-                "wandb" if (wandb_installed and self.config["wandb"]["use"]) else "none"
+                "wandb" if (wandb_installed and self._config["wandb"]["use"]) else "none"
             ),
-            **self.config["training"]["optimizer_parameters"],
+            **self._config["training"]["optimizer_parameters"],
         )
 
         return training_args
 
-    def create_metric_computer(self) -> tuple[backbone_metrics.MLMMetricComputer, dict[str, bool]]:
+    def create_metric_computer(self) -> backbone_metrics.MLMMetricComputer:
         tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = (
             self.create_tokenizer()
         )
 
         dataset: torch.utils.data.Dataset = datasets.CustomLineByLineDataset(
-            os.path.abspath(self.config["validation"]["path_to_data"])
+            os.path.abspath(self._config["validation"]["path_to_data"])
         )
         dataloader: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
             dataset,
-            batch_size=self.config["hyperparameters"]["batch_size"],
+            batch_size=self._config["hyperparameters"]["batch_size"],
             collate_fn=collators.MaskingCollator(
-                tokenizer, self.config["hyperparameters"]["seq_len"]
+                tokenizer, self._config["hyperparameters"]["seq_len"]
             ),
         )
 
         metric_computer: backbone_metrics.MLMMetricComputer = backbone_metrics.MLMMetricComputer(
             tokenizer,
-            self.config["validation"]["top_k"],
+            self._config["validation"]["top_k"],
             dataloader,
-            self.config["validation"]["confidence_interval"],
-            self.config["validation"]["interval_type"],
-            self.config["validation"]["confidence_level"],
+            self._config["validation"]["metrics"],
+            self._config["validation"]["confidence_interval"]["use"],
+            self._config["validation"]["confidence_interval"]["interval_type"],
+            self._config["validation"]["confidence_interval"]["confidence_level"],
         )
 
-        return (metric_computer, self.config["validation"]["metrics"])
+        return metric_computer
 
     def set_warmup_epochs(
         self, training_args: TrainingArguments, dataset_train: LineByLineTextDataset
@@ -262,8 +263,8 @@ class BackboneFactory(ABC):
             training_args (TrainingArguments): Training args create by corresponding method.
             dataset_train (LineByLineTextDataset): Train dataset so we can get it's len to compute warmup_steps.
         """
-        batch_size: int = self.config["hyperparameters"]["batch_size"]
-        n_warmup_epochs: int = self.config["training"]["n_warmup_epochs"]
+        batch_size: int = self._config["hyperparameters"]["batch_size"]
+        n_warmup_epochs: int = self._config["training"]["n_warmup_epochs"]
 
         training_args.warmup_steps = (
             ceil(len(dataset_train) / batch_size) * n_warmup_epochs
@@ -276,8 +277,8 @@ class BackboneFactory(ABC):
         Args:
             trainer (Trainer): Trainer that trained your model.
         """
-        if self.config["save_trained_model"]:
-            trainer.save_model(self.storage_path.joinpath("saved_model"))
+        if self._config["save_trained_model"]:
+            trainer.save_model(self._storage_path.joinpath("saved_model"))
 
 
 BACKBONE_REGISTER: dict[str, tp.Type[BackboneFactory]] = {}
@@ -304,21 +305,21 @@ class BERTFactory(BackboneFactory):
         super().__init__(config)
 
     def create_tokenizer(self) -> transformers.BertTokenizer:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
                 tokenizer: transformers.BertTokenizer = (
                     transformers.BertTokenizer.from_pretrained(
-                        "windowsartes/bert_tokenizer"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.BertTokenizer.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.BertTokenizer(
                 vocab_file=os.path.abspath(
-                    self.config["tokenizer"]["path_to_vocab_file"]
+                    self._config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
                 unk_token="[UNK]",
@@ -333,21 +334,21 @@ class BERTFactory(BackboneFactory):
     def create_model(self) -> transformers.BertForMaskedLM:
         tokenizer: transformers.BertTokenizer = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.BertForMaskedLM = (
                     transformers.BertForMaskedLM.from_pretrained("windowsartes/bert")
                 )
             else:
                 model = transformers.BertForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.BertConfig = transformers.BertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.BertForMaskedLM(config=config)
 
@@ -362,21 +363,21 @@ class BERTWithNSPFactory(BERTFactory):
     def create_model(self) -> transformers.BertForPreTraining:
         tokenizer: transformers.BertTokenizer = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.BertForPreTraining = (
                     transformers.BertForPreTraining.from_pretrained("windowsartes/bert_with_nsp")
                 )
             else:
                 model = transformers.BertForPreTraining.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.BertConfig = transformers.BertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=2*seq_len + 3,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.BertForPreTraining(config=config)
 
@@ -397,13 +398,13 @@ class BERTWithNSPFactory(BERTFactory):
             self.create_tokenizer()
         )
 
-        seq_len: int = self.config["hyperparameters"]["seq_len"]
+        seq_len: int = self._config["hyperparameters"]["seq_len"]
 
         dataset: datasets.CustomTextDatasetForNextSentencePrediction = \
             datasets.CustomTextDatasetForNextSentencePrediction(
                 tokenizer=tokenizer,
                 seq_len=seq_len,
-                file_path=os.path.abspath(self.config[mode]["path_to_data"]),
+                file_path=os.path.abspath(self._config[mode]["path_to_data"]),
                 block_size=2*seq_len + 3,
             )
 
@@ -415,21 +416,21 @@ class ConvBERTFactory(BackboneFactory):
         super().__init__(config)
 
     def create_tokenizer(self) -> transformers.ConvBertTokenizer:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
-                tokenizer: transformers.ConvBertTokenizer = (
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
+                tokenizer: transformers.BertTokenizer = (
                     transformers.ConvBertTokenizer.from_pretrained(
-                        "windowsartes/convbert_tokenizer"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.ConvBertTokenizer.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.ConvBertTokenizer(
                 vocab_file=os.path.abspath(
-                    self.config["tokenizer"]["path_to_vocab_file"]
+                    self._config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
                 unk_token="[UNK]",
@@ -444,8 +445,8 @@ class ConvBERTFactory(BackboneFactory):
     def create_model(self) -> transformers.ConvBertForMaskedLM:
         tokenizer: transformers.ConvBertTokenizer = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.ConvBertForMaskedLM = (
                     transformers.ConvBertForMaskedLM.from_pretrained(
                         "windowsartes/convbert"
@@ -453,14 +454,14 @@ class ConvBERTFactory(BackboneFactory):
                 )
             else:
                 model = transformers.ConvBertForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.ConvBertConfig = transformers.ConvBertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.ConvBertForMaskedLM(config=config)
 
@@ -472,23 +473,36 @@ class DeBERTaFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
+        self._explicitly_added_tokens: bool = False
+
     def create_tokenizer(self) -> transformers.DebertaTokenizerFast:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
-                tokenizer: transformers.DebertaTokenizerFast = (
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
+                tokenizer: transformers.BertTokenizer = (
                     transformers.DebertaTokenizerFast.from_pretrained(
-                        "windowsartes/deberta_tokenizer_fast"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.DebertaTokenizerFast.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
+            # don't know why, but we have to explicitly add [UNK] token to the vocab file
+            if not self._explicitly_added_tokens:
+                with open(self._config["tokenizer"]["path_to_vocab_file"], "a") as _vocab_file:
+                    _vocab_file.write("[UNK]\n")
+                    _vocab_file.write("[SEP]\n")
+                    _vocab_file.write("[PAD]\n")
+                    _vocab_file.write("[CLS]\n")
+                    _vocab_file.write("[MASK]\n")
+
+                self._explicitly_added_tokens = True
+
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
                     vocab_file=os.path.abspath(
-                        self.config["tokenizer"]["path_to_vocab_file"]
+                        self._config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
                     unk_token="[UNK]",
@@ -498,9 +512,10 @@ class DeBERTaFactory(BackboneFactory):
                     mask_token="[MASK]",
                 )
             )
-            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
+            temp_dir: pathlib.Path = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
             bert_tokenizer.save_pretrained(temp_dir)
+
             tokenizer = transformers.DebertaTokenizerFast.from_pretrained(temp_dir)
             shutil.rmtree(temp_dir)
 
@@ -509,8 +524,8 @@ class DeBERTaFactory(BackboneFactory):
     def create_model(self) -> transformers.DebertaForMaskedLM:
         tokenizer: transformers.DebertaTokenizerFast = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.DebertaForMaskedLM = (
                     transformers.DebertaForMaskedLM.from_pretrained(
                         "windowsartes/deberta"
@@ -518,14 +533,14 @@ class DeBERTaFactory(BackboneFactory):
                 )
             else:
                 model = transformers.DebertaForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.DebertaConfig = transformers.DebertaConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.DebertaForMaskedLM(config=config)
 
@@ -537,23 +552,36 @@ class FNetFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
+        self._explicitly_added_tokens: bool = False
+
     def create_tokenizer(self) -> transformers.FNetTokenizerFast:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
-                tokenizer: transformers.FNetTokenizerFast = (
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
+                tokenizer: transformers.BertTokenizer = (
                     transformers.FNetTokenizerFast.from_pretrained(
-                        "windowsartes/fnet_tokenizer_fast"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.FNetTokenizerFast.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
+            # don't know why, but we have to explicitly add [UNK] token to the vocab file
+            if not self._explicitly_added_tokens:
+                with open(self._config["tokenizer"]["path_to_vocab_file"], "a") as _vocab_file:
+                    _vocab_file.write("[UNK]\n")
+                    _vocab_file.write("[SEP]\n")
+                    _vocab_file.write("[PAD]\n")
+                    _vocab_file.write("[CLS]\n")
+                    _vocab_file.write("[MASK]\n")
+
+                self._explicitly_added_tokens = True
+
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
                     vocab_file=os.path.abspath(
-                        self.config["tokenizer"]["path_to_vocab_file"]
+                        self._config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
                     unk_token="[UNK]",
@@ -563,9 +591,10 @@ class FNetFactory(BackboneFactory):
                     mask_token="[MASK]",
                 )
             )
-            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
+            temp_dir: pathlib.Path = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
             bert_tokenizer.save_pretrained(temp_dir)
+
             tokenizer = transformers.FNetTokenizerFast.from_pretrained(temp_dir)
             shutil.rmtree(temp_dir)
 
@@ -574,21 +603,21 @@ class FNetFactory(BackboneFactory):
     def create_model(self) -> transformers.FNetForMaskedLM:
         tokenizer: transformers.FNetTokenizerFast = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.FNetForMaskedLM = (
                     transformers.FNetForMaskedLM.from_pretrained("windowsartes/fnet")
                 )
             else:
                 model = transformers.FNetForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.FNetConfig = transformers.FNetConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.FNetForMaskedLM(config=config)
 
@@ -601,21 +630,21 @@ class FunnelTransformerFactory(BackboneFactory):
         super().__init__(config)
 
     def create_tokenizer(self) -> transformers.FunnelTokenizer:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
                 tokenizer: transformers.FunnelTokenizer = (
                     transformers.FunnelTokenizer.from_pretrained(
-                        "windowsartes/funnel_tokenizer"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.FunnelTokenizer.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.FunnelTokenizer(
                 vocab_file=os.path.abspath(
-                    self.config["tokenizer"]["path_to_vocab_file"]
+                    self._config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
                 do_basic_tokenize=True,
@@ -631,8 +660,8 @@ class FunnelTransformerFactory(BackboneFactory):
     def create_model(self) -> transformers.FunnelForMaskedLM:
         tokenizer: transformers.FunnelTokenizer = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.FunnelForMaskedLM = (
                     transformers.FunnelForMaskedLM.from_pretrained(
                         "windowsartes/funnel"
@@ -640,12 +669,12 @@ class FunnelTransformerFactory(BackboneFactory):
                 )
             else:
                 model = transformers.FunnelForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
             config: transformers.FunnelConfig = transformers.FunnelConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.FunnelForMaskedLM(config=config)
 
@@ -658,21 +687,21 @@ class MobileBERTFactory(BackboneFactory):
         super().__init__(config)
 
     def create_tokenizer(self) -> transformers.MobileBertTokenizer:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
                 tokenizer: transformers.MobileBertTokenizer = (
                     transformers.MobileBertTokenizer.from_pretrained(
-                        "windowsartes/mobilebert_tokenizer"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.MobileBertTokenizer.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.MobileBertTokenizer(
                 vocab_file=os.path.abspath(
-                    self.config["tokenizer"]["path_to_vocab_file"]
+                    self._config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
                 do_basic_tokenize=True,
@@ -688,8 +717,8 @@ class MobileBERTFactory(BackboneFactory):
     def create_model(self) -> transformers.MobileBertForMaskedLM:
         tokenizer: transformers.FunnelTokenizer = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.MobileBertForMaskedLM = (
                     transformers.MobileBertForMaskedLM.from_pretrained(
                         "windowsartes/mobilebert"
@@ -697,14 +726,14 @@ class MobileBERTFactory(BackboneFactory):
                 )
             else:
                 model = transformers.MobileBertForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.MobileBertConfig = transformers.MobileBertConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 2,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.MobileBertForMaskedLM(config=config)
 
@@ -716,23 +745,36 @@ class RoBERTaFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
+        self._explicitly_added_tokens: bool = False
+
     def create_tokenizer(self) -> transformers.RobertaTokenizerFast:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
-                tokenizer: transformers.RobertaTokenizerFast = (
-                    transformers.RobertaTokenizerFast.from_pretrained(
-                        "windowsartes/roberta_tokenizer_fast"
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
+                tokenizer: transformers.BertTokenizerFast = (
+                    transformers.BertTokenizerFast.from_pretrained(
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
-                tokenizer = transformers.RobertaTokenizerFast.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                tokenizer = transformers.BertTokenizerFast.from_pretrained(
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
+            # don't know why, but we have to explicitly add [UNK] token to the vocab file
+            if not self._explicitly_added_tokens:
+                with open(self._config["tokenizer"]["path_to_vocab_file"], "a") as _vocab_file:
+                    _vocab_file.write("[UNK]\n")
+                    _vocab_file.write("[SEP]\n")
+                    _vocab_file.write("[PAD]\n")
+                    _vocab_file.write("[CLS]\n")
+                    _vocab_file.write("[MASK]\n")
+
+                self._explicitly_added_tokens = True
+
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
                     vocab_file=os.path.abspath(
-                        self.config["tokenizer"]["path_to_vocab_file"]
+                        self._config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
                     unk_token="[UNK]",
@@ -742,9 +784,10 @@ class RoBERTaFactory(BackboneFactory):
                     mask_token="[MASK]",
                 )
             )
-            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
+            temp_dir: pathlib.Path = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
             bert_tokenizer.save_pretrained(temp_dir)
+
             tokenizer = transformers.RobertaTokenizerFast.from_pretrained(temp_dir)
             shutil.rmtree(temp_dir)
 
@@ -753,8 +796,8 @@ class RoBERTaFactory(BackboneFactory):
     def create_model(self) -> transformers.RobertaForMaskedLM:
         tokenizer: transformers.RobertaTokenizerFast = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.RobertaForMaskedLM = (
                     transformers.RobertaForMaskedLM.from_pretrained(
                         "windowsartes/roberta"
@@ -762,14 +805,14 @@ class RoBERTaFactory(BackboneFactory):
                 )
             else:
                 model = transformers.RobertaForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.RobertaConfig = transformers.RobertaConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 4,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.RobertaForMaskedLM(config=config)
 
@@ -782,21 +825,21 @@ class RoFormerFactory(BackboneFactory):
         super().__init__(config)
 
     def create_tokenizer(self) -> transformers.RoFormerTokenizer:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
                 tokenizer: transformers.RoFormerTokenizer = (
                     transformers.RoFormerTokenizer.from_pretrained(
-                        "windowsartes/roformer_tokenizer"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.RoFormerTokenizer.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
             tokenizer = transformers.RoFormerTokenizer(
                 vocab_file=os.path.abspath(
-                    self.config["tokenizer"]["path_to_vocab_file"]
+                    self._config["tokenizer"]["path_to_vocab_file"]
                 ),
                 do_lower_case=False,
                 unk_token="[UNK]",
@@ -811,8 +854,8 @@ class RoFormerFactory(BackboneFactory):
     def create_model(self) -> transformers.RoFormerForMaskedLM:
         tokenizer: transformers.RoFormerTokenizer = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.RoFormerForMaskedLM = (
                     transformers.RoFormerForMaskedLM.from_pretrained(
                         "windowsartes/roformer"
@@ -820,14 +863,14 @@ class RoFormerFactory(BackboneFactory):
                 )
             else:
                 model = transformers.RoFormerForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.RoFormerConfig = transformers.RoFormerConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 4,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.RoFormerForMaskedLM(config=config)
 
@@ -839,23 +882,35 @@ class XLMRoBERTaFactory(BackboneFactory):
     def __init__(self, config: dict[str, tp.Any]):
         super().__init__(config)
 
+        self._explicitly_added_tokens: bool = False
+
     def create_tokenizer(self) -> transformers.XLMRobertaTokenizerFast:
-        if self.config["tokenizer"]["use_pretrained"]:
-            if self.config["tokenizer"]["path_to_saved_tokenizer"] is None:
+        if self._config["tokenizer"]["use_pretrained"]:
+            if self._config["tokenizer"]["from_huggingface"]:
                 tokenizer: transformers.XLMRobertaTokenizerFast = (
                     transformers.XLMRobertaTokenizerFast.from_pretrained(
-                        "windowsartes/xlmroberta_tokenizer_fast"
+                        self._config["tokenizer"]["path_to_saved_tokenizer"],
                     )
                 )
             else:
                 tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(
-                    os.path.abspath(self.config["tokenizer"]["path_to_saved_tokenizer"])
+                    os.path.abspath(self._config["tokenizer"]["path_to_saved_tokenizer"])
                 )
         else:
+            if not self._explicitly_added_tokens:
+                with open(self._config["tokenizer"]["path_to_vocab_file"], "a") as _vocab_file:
+                    _vocab_file.write("[UNK]\n")
+                    _vocab_file.write("[SEP]\n")
+                    _vocab_file.write("[PAD]\n")
+                    _vocab_file.write("[CLS]\n")
+                    _vocab_file.write("[MASK]\n")
+
+                self._explicitly_added_tokens = True
+
             bert_tokenizer: transformers.BertTokenizerFast = (
                 transformers.BertTokenizerFast(
                     vocab_file=os.path.abspath(
-                        self.config["tokenizer"]["path_to_vocab_file"]
+                        self._config["tokenizer"]["path_to_vocab_file"]
                     ),
                     do_lower_case=False,
                     unk_token="[UNK]",
@@ -865,9 +920,10 @@ class XLMRoBERTaFactory(BackboneFactory):
                     mask_token="[MASK]",
                 )
             )
-            temp_dir = pathlib.Path(utils.get_cwd()).joinpath("_temp")
+            temp_dir: pathlib.Path = pathlib.Path(utils.get_cwd()).joinpath("_temp")
 
             bert_tokenizer.save_pretrained(temp_dir)
+
             tokenizer = transformers.XLMRobertaTokenizerFast.from_pretrained(temp_dir)
             shutil.rmtree(temp_dir)
 
@@ -876,8 +932,8 @@ class XLMRoBERTaFactory(BackboneFactory):
     def create_model(self) -> transformers.XLMRobertaForMaskedLM:
         tokenizer: transformers.XLMRobertaTokenizerFast = self.create_tokenizer()
 
-        if self.config["model"]["use_pretrained"]:
-            if self.config["model"]["path_to_saved_weights"] is None:
+        if self._config["model"]["use_pretrained"]:
+            if self._config["model"]["path_to_saved_weights"] is None:
                 model: transformers.XLMRobertaForMaskedLM = (
                     transformers.XLMRobertaForMaskedLM.from_pretrained(
                         "windowsartes/xlmroberta"
@@ -885,14 +941,14 @@ class XLMRoBERTaFactory(BackboneFactory):
                 )
             else:
                 model = transformers.XLMRobertaForMaskedLM.from_pretrained(
-                    os.path.abspath(self.config["model"]["path_to_saved_weights"])
+                    os.path.abspath(self._config["model"]["path_to_saved_weights"])
                 )
         else:
-            seq_len: int = self.config["hyperparameters"]["seq_len"]
+            seq_len: int = self._config["hyperparameters"]["seq_len"]
             config: transformers.XLMRobertaConfig = transformers.XLMRobertaConfig(
                 vocab_size=tokenizer.vocab_size + len(tokenizer.all_special_tokens),
                 max_position_embeddings=seq_len + 4,
-                **self.config["model"]["config"],
+                **self._config["model"]["config"],
             )
             model = transformers.XLMRobertaForMaskedLM(config=config)
 

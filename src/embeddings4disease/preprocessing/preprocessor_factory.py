@@ -17,12 +17,13 @@ class PreprocessorFactory(ABC):
     """
     Base class for preprocessor.
     """
-    def __init__(self, config: dict[str, tp.Any]):
-        self.config: dict[str, tp.Any] = config
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore
+        pass
 
     @abstractmethod
-    def create_vocab(self) -> None:
+    def create_vocab(self, dataset_type: str) -> None:
         """
+        TO-DO: update
         This method must create a vocab file: just a txt-file where all the tokens written line by line.
         For example:
 
@@ -69,9 +70,9 @@ class PreprocessorFactory(ABC):
 
 PREPROCESSOR_REGISTER: dict[str, tp.Type[PreprocessorFactory]] = {}
 
-
 def preprocessor(cls: tp.Type[PreprocessorFactory]) -> tp.Type[PreprocessorFactory]:
     PREPROCESSOR_REGISTER[cls.__name__[:-19]] = cls
+
     return cls
 
 
@@ -81,32 +82,34 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
     Preprocessor for the [MIMIC-4](https://physionet.org/content/mimiciv/2.2/) dataset.
     """
     def __init__(self, config: dict[str, tp.Any]):
-        super().__init__(config)
+        super().__init__()
+
+        self.__config: dict[str, tp.Any] = config
 
         storage_dir: pathlib.Path = pathlib.Path(
-            os.path.abspath(self.config["storage_dir"])
+            os.path.abspath(self.__config["storage_dir"])
         )
         utils.create_dir(storage_dir)
 
-        self.storage_dir: pathlib.Path = storage_dir
+        self.__storage_dir: pathlib.Path = storage_dir
 
     def create_seq2seq_dataset(self) -> None:
-        storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("seq2seq"))
+        storage_dir: pathlib.Path = self.__storage_dir.joinpath(pathlib.Path("seq2seq"))
         utils.create_dir(storage_dir)
 
-        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["diagnoses"]))
+        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.__config["diagnoses"]))
         diagnoses = diagnoses[diagnoses.icd_version == 10]
         diagnoses = self._preprocess_codes(
             diagnoses,
-            self.config["code_length"],
-            self.config["code_lower_bound"],
-            self.config["code_upper_bound"],
+            self.__config["code_length"],
+            self.__config["code_lower_bound"],
+            self.__config["code_upper_bound"],
         )
 
-        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["admissions"]))
+        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.__config["admissions"]))
         admissions.admittime = utils.str2datetime(admissions.admittime)
 
-        threshold_date: datetime = parser.parse(self.config["threshold_date"])
+        threshold_date: datetime = parser.parse(self.__config["threshold_date"])
 
         admissions_train: pd.DataFrame = admissions[admissions.admittime < threshold_date]
         admissions_validation: pd.DataFrame = admissions[admissions.admittime >= threshold_date]
@@ -118,35 +121,37 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
         del diagnoses
 
-        self._seq2seq_dataframe2file(storage_dir.joinpath("train_transactions.txt"),
-                                     train_dataframe,
-                                     admissions_train,
-                                     "train",
-                                    )
+        self._seq2seq_dataframe2file(
+            storage_dir.joinpath("train_transactions.txt"),
+            train_dataframe,
+            admissions_train,
+            "train",
+        )
 
-        self._seq2seq_dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
-                                     validation_dataframe,
-                                     admissions_validation,
-                                     "validation",
-                                    )
+        self._seq2seq_dataframe2file(
+            storage_dir.joinpath("validation_transactions.txt"),
+            validation_dataframe,
+            admissions_validation,
+            "validation",
+        )
 
     def create_mlm_dataset(self) -> None:
-        storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("mlm"))
+        storage_dir: pathlib.Path = self.__storage_dir.joinpath(pathlib.Path("mlm"))
         utils.create_dir(storage_dir)
 
-        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["diagnoses"]))
+        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.__config["diagnoses"]))
         diagnoses = diagnoses[diagnoses.icd_version == 10]
         diagnoses = self._preprocess_codes(
             diagnoses,
-            self.config["code_length"],
-            self.config["code_lower_bound"],
-            self.config["code_upper_bound"],
+            self.__config["code_length"],
+            self.__config["code_lower_bound"],
+            self.__config["code_upper_bound"],
         )
 
-        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["admissions"]))
+        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.__config["admissions"]))
         admissions.admittime = utils.str2datetime(admissions.admittime)
 
-        threshold_date: datetime = parser.parse(self.config["threshold_date"])
+        threshold_date: datetime = parser.parse(self.__config["threshold_date"])
 
         admissions_train: pd.DataFrame = admissions[admissions.admittime < threshold_date]
         admissions_validation: pd.DataFrame = admissions[admissions.admittime >= threshold_date]
@@ -158,22 +163,28 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
         del diagnoses
 
-        self._mlm_dataframe2file(storage_dir.joinpath("train_transactions.txt"),
-                                 train_dataframe,
-                                 "train",
-                                )
+        self._mlm_dataframe2file(
+            storage_dir.joinpath("train_transactions.txt"),
+            train_dataframe,
+            "train",
+        )
 
-        self._mlm_dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
-                                 validation_dataframe,
-                                 "validation",
-                                )
+        self._mlm_dataframe2file(
+            storage_dir.joinpath("validation_transactions.txt"),
+            validation_dataframe,
+            "validation",
+        )
 
     def create_vocab(self, dataset_type: str) -> None:
         vocab: set[str] = set()
 
+        train_file_path: str | pathlib.Path = self.__storage_dir.joinpath(
+            pathlib.Path(f"{dataset_type}").joinpath("train_transactions.txt")
+        )
+
         with (
-            open(self.storage_dir.joinpath(pathlib.Path(f"{dataset_type}").joinpath("train_transactions.txt")), "r") as train_file,
-            open(self.storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
+            open(train_file_path, "r") as train_file,
+            open(self.__storage_dir.joinpath("vocab.txt"), "w") as vocab_file,
         ):
             progress_bar: std.tqdm = tqdm(train_file)
             progress_bar.set_description("Creating vocabulary file")
@@ -186,22 +197,22 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                         vocab_file.write(token + "\n")
 
     def create_nsp_dataset(self) -> None:
-        storage_dir: pathlib.Path = self.storage_dir.joinpath(pathlib.Path("nsp"))
+        storage_dir: pathlib.Path = self.__storage_dir.joinpath(pathlib.Path("nsp"))
         utils.create_dir(storage_dir)
 
-        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["diagnoses"]))
+        diagnoses: pd.DataFrame = pd.read_csv(os.path.abspath(self.__config["diagnoses"]))
         diagnoses = diagnoses[diagnoses.icd_version == 10]
         diagnoses = self._preprocess_codes(
             diagnoses,
-            self.config["code_length"],
-            self.config["code_lower_bound"],
-            self.config["code_upper_bound"],
+            self.__config["code_length"],
+            self.__config["code_lower_bound"],
+            self.__config["code_upper_bound"],
         )
 
-        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.config["admissions"]))
+        admissions: pd.DataFrame = pd.read_csv(os.path.abspath(self.__config["admissions"]))
         admissions.admittime = utils.str2datetime(admissions.admittime)
 
-        threshold_date: datetime = parser.parse(self.config["threshold_date"])
+        threshold_date: datetime = parser.parse(self.__config["threshold_date"])
 
         admissions_train: pd.DataFrame = admissions[admissions.admittime < threshold_date]
         admissions_validation: pd.DataFrame = admissions[admissions.admittime >= threshold_date]
@@ -213,21 +224,24 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
         del diagnoses
 
-        self._nsp_dataframe2file(storage_dir.joinpath("train_transactions.txt"),
-                                 train_dataframe,
-                                 "train",
-                                )
+        self._nsp_dataframe2file(
+            storage_dir.joinpath("train_transactions.txt"),
+            train_dataframe,
+            "train",
+        )
 
-        self._nsp_dataframe2file(storage_dir.joinpath("validation_transactions.txt"),
-                                 validation_dataframe,
-                                 "validation",
-                                )
+        self._nsp_dataframe2file(
+            storage_dir.joinpath("validation_transactions.txt"),
+            validation_dataframe,
+            "validation",
+        )
 
-    def _mlm_dataframe2file(self,
-                            path: str | pathlib.Path,
-                            dataframe: pd.DataFrame,
-                            label: str,
-                           ) -> None:
+    def _mlm_dataframe2file(
+        self,
+        path: str | pathlib.Path,
+        dataframe: pd.DataFrame,
+        label: str,
+    ) -> None:
         """
         Converts preprocessed pandas Dataframe into the txt file.
 
@@ -254,14 +268,15 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                     unique_tokens = self._get_unique_tokens(subject_transactions, hadm_id)
                     file.write(" ".join(unique_tokens) + "\n")
 
-    def _seq2seq_dataframe2file(self,
-                                path: str | pathlib.Path,
-                                dataframe: pd.DataFrame,
-                                admissions: pd.DataFrame,
-                                label: str,
-                               ) -> None:
-        lower_bound: int = self.config["lower_bound"]
-        upper_bound: int = self.config["upper_bound"]
+    def _seq2seq_dataframe2file(
+        self,
+        path: str | pathlib.Path,
+        dataframe: pd.DataFrame,
+        admissions: pd.DataFrame,
+        label: str,
+    ) -> None:
+        lower_bound: int = self.__config["lower_bound"]
+        upper_bound: int = self.__config["upper_bound"]
 
         with open(path, "w") as file:
             subject_ids: list[int] = list(set(dataframe["subject_id"]))
@@ -290,26 +305,34 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
                         for target_hadm_id in hadm_ids[i+1:]:
                             target_admittime = admissions[admissions.hadm_id == target_hadm_id].admittime.values[0]
 
-                            diff_in_months = ((target_admittime - source_admittime).astype("timedelta64[M]"))/np.timedelta64(1, "M")
+                            diff_in_months = (
+                                (target_admittime - source_admittime).astype("timedelta64[M]")
+                            )/np.timedelta64(1, "M")
+
                             if lower_bound <= diff_in_months <= upper_bound:
                                 target_hadm_ids.append(target_hadm_id)
 
                         if len(target_hadm_ids) != 0:
                             # make target
-                            source_diseases: set[str] = set(subject_transactions[subject_transactions.hadm_id == source_hadm_id].icd_code.values)
+                            source_diseases: set[str] = set(
+                                subject_transactions[subject_transactions.hadm_id == source_hadm_id].icd_code.values
+                            )
 
                             target_diseases: set[str] = source_diseases.copy()
                             for target_hadm_id in target_hadm_ids:
-                                target_diseases.update(set(subject_transactions[subject_transactions.hadm_id == target_hadm_id].icd_code.values))
+                                target_diseases.update(
+                                    set(subject_transactions[subject_transactions.hadm_id == target_hadm_id].icd_code.values)
+                                )
                             target_diseases.difference_update(source_diseases)
 
                             file.write(" ".join(source_diseases) + "," + " ".join(target_diseases) + "\n")
 
-    def _nsp_dataframe2file(self,
-                            path: str | pathlib.Path,
-                            dataframe: pd.DataFrame,
-                            label: str,
-                           ) -> None:
+    def _nsp_dataframe2file(
+        self,
+        path: str | pathlib.Path,
+        dataframe: pd.DataFrame,
+        label: str,
+    ) -> None:
         """
         Converts preprocessed pandas Dataframe into the txt file.
 
@@ -343,7 +366,8 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
 
     @staticmethod
     def _get_unique_tokens(
-        subject_transactions: pd.DataFrame, hadm_id: int
+        subject_transactions: pd.DataFrame,
+        hadm_id: int,
     ) -> list[str]:
         """
         Returns unique diseases that were detected during the given hadm_id with respect to order.
@@ -403,7 +427,9 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
     Preprocessor for the secret dataset.
     """
     def __init__(self, config: dict[str, tp.Any]):
-        super().__init__(config)
+        super().__init__()
+
+        self.config = config
 
         random_seed: int = self.config["random_seed"]
         random.seed(random_seed)
@@ -511,7 +537,7 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
                                     " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
                                 )
 
-    def create_vocab(self) -> None:
+    def create_vocab(self, dataset_type: str) -> None:
         vocab: set[str] = set()
 
         with (

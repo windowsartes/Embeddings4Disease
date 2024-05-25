@@ -1,7 +1,7 @@
 dataset: MIMIC
 diagnoses: data/mimic/diagnoses_icd.csv
 admissions: data/mimic/admissions.csv
-storage_dir: data/preprocessed
+storage_dir: data/preprocess
 threshold_date: "2180-01-01"
 code_length: 3
 code_lower_bound: "A"

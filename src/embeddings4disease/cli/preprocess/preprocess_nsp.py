@@ -10,5 +10,6 @@ def preprocess(config_path: str) -> None:
     factory.create_nsp_dataset()
     factory.create_vocab("nsp")
 
+
 if __name__ == "__main__":
     preprocess()

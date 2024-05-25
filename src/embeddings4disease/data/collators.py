@@ -14,10 +14,12 @@ class MaskingCollator:
     """
 
     def __init__(
-        self, tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, seq_len: int
+        self,
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        seq_len: int,
     ):
-        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
-        self.seq_len: int = seq_len
+        self._tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self._seq_len: int = seq_len
 
     def __call__(self, sequence_batch: list[str]) -> tuple[dict[str, torch.Tensor], list[str]]:
         """
@@ -38,14 +40,14 @@ class MaskingCollator:
         for sequence in sequence_batch:
             sequence_splitted = sequence.split(" ")
 
-            sequence_splitted = sequence_splitted[:self.seq_len]
+            sequence_splitted = sequence_splitted[:self._seq_len]
 
             inputs_sequence.append(
-                " ".join(sequence_splitted[:-1] + [self.tokenizer.mask_token])
+                " ".join(sequence_splitted[:-1] + [self._tokenizer.mask_token])
             )
             answers.append(sequence_splitted[-1])
 
-        inputs: dict[str, torch.Tensor] = self.tokenizer(
+        inputs: dict[str, torch.Tensor] = self._tokenizer(
             inputs_sequence, padding="longest", return_tensors="pt"
         )
 
@@ -62,11 +64,12 @@ class MultiLabelHeadCollator:
         seq_len (int): maximum length in tokens one input sequence can be.
     """
     def __init__(
-        self, tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+        self,
+        tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
         seq_len: int,
     ):
-        self.tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
-        self.seq_len: int = seq_len
+        self._tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast = tokenizer
+        self._seq_len: int = seq_len
 
     def __call__(self, sequence_batch: list[tuple[str, torch.LongTensor]]) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
         """
@@ -90,8 +93,12 @@ class MultiLabelHeadCollator:
             source_sequences_lst.append(source_sequence)
             targets.append(target)
 
-        source_sequences: dict[str, torch.Tensor] = self.tokenizer(
-            source_sequences_lst, padding="longest", return_tensors="pt",
-            truncation=True, max_length=self.seq_len)
+        source_sequences: dict[str, torch.Tensor] = self._tokenizer(
+            source_sequences_lst,
+            padding="longest",
+            return_tensors="pt",
+            truncation=True,
+            max_length=self._seq_len,
+        )
 
         return source_sequences, torch.stack(targets, dim=0)

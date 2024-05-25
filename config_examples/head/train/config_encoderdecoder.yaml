@@ -1,29 +1,39 @@
 model:
  type: EncoderDecoder
  from_encoder_decoder: true
- encode:
+ encoder:
   from_huggingface: true
   path_to_saved_model: windowsartes/bert
  decoder:
+  from_pretrained: false
   from_huggingface: true
-  path_to_saved_model: windowsartes/bert
+  path_to_saved_model: windowsartes/gpt2
+  config:
+   embedding_size: 384
+   n_heads: 12
+   n_layers: 12
 tokenizer:
  from_huggingface: true
  path_to_saved_tokenizer: windowsartes/bert_tokenizer
 hyperparameters:
- batch_size: 128
+ batch_size: 256
  seq_len: 24
 training:
  device: cuda:0
  path_to_data: data/preprocessed/seq2seq/train_transactions.txt
- n_epochs: 10
+ n_epochs: 15
+ n_warmup_epochs: 10
 validation:
  path_to_data: data/preprocessed/seq2seq/validation_transactions.txt
  period: 1
  save_graphs: true
+ confidence_interval:
+  use: true
+  interval_type: central
+  confidence_level: 0.95
  metrics: 
   exact_match: false
   accuracy: true
   precision: true
   recall: true
-  f_score: true
+  f_score: false
