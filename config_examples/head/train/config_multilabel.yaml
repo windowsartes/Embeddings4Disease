@@ -8,16 +8,16 @@ model:
  head:
   n_last_layers: 4
   aggregation: "concatenation"
-  mode: "transfer learning"
-  hidden_sizes: [1024, 512, 256]
-  hidden_use_dropout: True
+  mode: "fine tuning"
+  hidden_sizes: [1024,]
+  hidden_use_dropout: false
   hidden_dropout_rate: 0.1
-  hidden_use_normalization: True
+  hidden_use_normalization: false
 tokenizer:
  from_huggingface: true
  path_to_saved_tokenizer: windowsartes/bert_tokenizer
 hyperparameters:
- batch_size: 512
+ batch_size: 256
  seq_len: 24
 training:
  device: cuda:0
@@ -26,7 +26,7 @@ training:
  n_warmup_epochs: 10
  optimizer_parameters:
   learning_rate: 0.001
-  backbone_learning_rate: null
+  backbone_learning_rate: 0.0001
   adam_beta1: 0.9
   adam_beta2: 0.999
   weight_decay: 0.01
@@ -40,4 +40,4 @@ validation:
   accuracy: true
   precision: true
   recall: true
-  f_score: true
+  f_score: false
