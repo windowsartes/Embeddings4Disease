@@ -162,7 +162,20 @@ class MetricComputerInterface(ABC):
             point_estimation = np.mean(data)
             bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
 
-            if self.__interval_type == "normal":
+
+            if self.__interval_type == "with_std":
+                quantile = ss.norm.ppf((1 + self.__confidence_level) / 2, loc=0, scale=1)
+
+                std_estimation: float = np.std(bootstrap_estimations, ddof=1)
+
+                metrics_value[metric] = ConfidenceInterval(
+                    float(round(point_estimation, 4)),
+                    (
+                        float(round(point_estimation - quantile * std_estimation / np.sqrt(len(data)), 4)),
+                        float(round(point_estimation + quantile * std_estimation / np.sqrt(len(data)), 4))
+                    ),
+                )
+            elif self.__interval_type == "normal":
                 bootstrap_estimations_std = np.std(bootstrap_estimations, ddof=1)
                 quantile = ss.norm.ppf((1 + self.__confidence_level) / 2, loc=0, scale=1)
 
@@ -372,7 +385,7 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
                     )
                 )
 
-        if self.__use_confidence_interval and self.__interval_type not in ["quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["with_std", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                             "Only point estimation will be returned.")
             point_estimations: dict[str, float] = self._get_point_estimation(metrics_storage)
@@ -526,7 +539,7 @@ class Baseline(MetricComputerInterface):
                         )
                     )
 
-        if self.__use_confidence_interval and self.__interval_type not in ["quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["with_std", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                             "Only point estimation will be returned.")
             point_estimations: dict[str, float] = self._get_point_estimation(metrics_storage)
