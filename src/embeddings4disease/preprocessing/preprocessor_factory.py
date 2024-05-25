@@ -17,12 +17,13 @@ class PreprocessorFactory(ABC):
     """
     Base class for preprocessor.
     """
-    def __init__(self):
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore
         pass
 
     @abstractmethod
-    def create_vocab(self) -> None:
+    def create_vocab(self, dataset_type: str) -> None:
         """
+        TO-DO: update
         This method must create a vocab file: just a txt-file where all the tokens written line by line.
         For example:
 
@@ -177,7 +178,7 @@ class MIMICPreprocessorFactory(PreprocessorFactory):
     def create_vocab(self, dataset_type: str) -> None:
         vocab: set[str] = set()
 
-        train_file_path: str = self.__storage_dir.joinpath(
+        train_file_path: str | pathlib.Path = self.__storage_dir.joinpath(
             pathlib.Path(f"{dataset_type}").joinpath("train_transactions.txt")
         )
 
@@ -426,7 +427,9 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
     Preprocessor for the secret dataset.
     """
     def __init__(self, config: dict[str, tp.Any]):
-        super().__init__(config)
+        super().__init__()
+
+        self.config = config
 
         random_seed: int = self.config["random_seed"]
         random.seed(random_seed)
@@ -534,7 +537,7 @@ class SecretDatasetPreprocessorFactory(PreprocessorFactory):
                                     " ".join(unique_tokens) + "," + " ".join(next_unique_tokens) + "\n"
                                 )
 
-    def create_vocab(self) -> None:
+    def create_vocab(self, dataset_type: str) -> None:
         vocab: set[str] = set()
 
         with (

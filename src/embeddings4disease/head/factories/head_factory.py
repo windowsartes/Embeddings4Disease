@@ -65,7 +65,6 @@ class HeadFactory(ABC):
         """
         pass
 
-
     @abstractmethod
     def create_callbacks(self) -> list[transformers.TrainerCallback] | list[custom_callbacks.CustomCallback]:
         pass
@@ -80,6 +79,14 @@ class HeadFactory(ABC):
 
     @abstractmethod
     def create_metric_computer(self) -> head_metrics.MetricComputerInterface:
+        pass
+
+    @abstractmethod
+    def set_warmup_epochs(
+        self,
+        training_args: transformers.TrainingArguments,
+        dataset_train: Dataset,
+    ) -> None:
         pass
 
     def _create_storage(self) -> None:
@@ -145,7 +152,7 @@ class HuggingFaceHeadFactory(HeadFactory):
     def set_warmup_epochs(
         self,
         training_args: transformers.TrainingArguments,
-        dataset_train: EncoderDecoderDataset
+        dataset_train: EncoderDecoderDataset  # type: ignore
     ) -> None:
         batch_size: int = self._config["hyperparameters"]["batch_size"]
         n_warmup_epochs: int = self._config["training"]["n_warmup_epochs"]

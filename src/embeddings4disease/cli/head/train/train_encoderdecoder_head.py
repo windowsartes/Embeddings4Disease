@@ -18,11 +18,16 @@ def train(config_path: str) -> None:
     tokenizer = factory.load_tokenizer()
 
     model = factory.create_model()
+
     training_args = factory.create_training_args()
 
     data_collator = factory.create_collator()
     dataset_train = factory.create_dataset("training")
     dataset_eval = factory.create_dataset("validation")
+
+    factory.set_warmup_epochs(training_args, dataset_train)
+
+    metric_computer = factory.create_metric_computer()
 
     callbacks = factory.create_callbacks()
 
@@ -33,8 +38,8 @@ def train(config_path: str) -> None:
         eval_dataset=dataset_eval,
         data_collator=data_collator,
         tokenizer=tokenizer,
+        compute_metrics=metric_computer,
         callbacks=callbacks,
-        # compute_metrics=compute_metrics,
     )
 
     trainer.train()
