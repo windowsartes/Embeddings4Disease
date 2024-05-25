@@ -163,7 +163,7 @@ class MetricComputerInterface(ABC):
             bootstrap_estimations = np.mean(data_bootstrapped, axis=1)
 
 
-            if self.__interval_type == "with_std":
+            if self.__interval_type == "standart":
                 quantile = ss.norm.ppf((1 + self.__confidence_level) / 2, loc=0, scale=1)
 
                 std_estimation: float = np.std(bootstrap_estimations, ddof=1)
@@ -385,7 +385,7 @@ class EncoderDecoderHeadMetricComputer(MetricComputerInterface):
                     )
                 )
 
-        if self.__use_confidence_interval and self.__interval_type not in ["with_std", "quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["standart", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                             "Only point estimation will be returned.")
             point_estimations: dict[str, float] = self._get_point_estimation(metrics_storage)
@@ -539,7 +539,7 @@ class Baseline(MetricComputerInterface):
                         )
                     )
 
-        if self.__use_confidence_interval and self.__interval_type not in ["with_std", "quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["standart", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                             "Only point estimation will be returned.")
             point_estimations: dict[str, float] = self._get_point_estimation(metrics_storage)

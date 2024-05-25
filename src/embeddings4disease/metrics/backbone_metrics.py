@@ -466,7 +466,7 @@ class Baseline(MetricComputerInterface):
                         )
                     )
 
-        if self.__use_confidence_interval and self.__interval_type not in ["with_std", "quantile", "normal", "central"]:
+        if self.__use_confidence_interval and self.__interval_type not in ["standart", "quantile", "normal", "central"]:
             warnings.warn("'interval_type' you've passed doen't supported. See docs for more details. \n" + \
                           "Only point estimation will be returned.")
             return self._get_point_estimation(metrics_storage)
