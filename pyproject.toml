@@ -53,15 +53,16 @@ development = [
 ]
 
 [project.scripts]
-preprocess_mlm = "embeddings4disease.cli.preprocess_mlm:preprocess"
-preprocess_nsp = "embeddings4disease.cli.preprocess_nsp:preprocess"
-preprocess_seq2seq = "embeddings4disease.cli.preprocess_seq2seq:preprocess"
-train_backbone = "embeddings4disease.cli.train_backbone:train"
-train_miltilabel_head = "embeddings4disease.cli.train_multilabel_head:train"
-train_encoderdecoder_head = "embeddings4disease.cli.train_encoderdecoder_head:train"
-validate_backbone = "embeddings4disease.cli.validate_backbone:validate"
-validate_baseline = "embeddings4disease.cli.validate_baseline:validate"
-validate_multilabel_head = "embeddings4disease.cli.validate_multilabel_head:validate"
+preprocess_mlm = "embeddings4disease.cli.preprocess.preprocess_mlm:preprocess"
+preprocess_nsp = "embeddings4disease.cli.preprocess.preprocess_nsp:preprocess"
+preprocess_seq2seq = "embeddings4disease.cli.preprocess.preprocess_seq2seq:preprocess"
+train_backbone = "embeddings4disease.cli.backbone.train.train_backbone:train"
+validate_backbone = "embeddings4disease.cli.backbone.validate.validate_backbone:validate"
+validate_backbone_baseline = "embeddings4disease.cli.backbone.validate.validate_baseline:validate"
+train_multilabel_head = "embeddings4disease.cli.head.train.train_multilabel_head:train"
+train_encoderdecoder_head = "embeddings4disease.cli.head.train.train_encoderdecoder_head:train"
+validate_multilabel_head = "embeddings4disease.cli.head.validate.validate_multilabel_head:validate"
+validate_head_baseline = "embeddings4disease.cli.head.validate.validate_baseline:validate"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
