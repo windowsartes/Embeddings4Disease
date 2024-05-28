@@ -81,14 +81,6 @@ class HeadFactory(ABC):
     def create_metric_computer(self) -> head_metrics.MetricComputerInterface:
         pass
 
-    @abstractmethod
-    def set_warmup_epochs(
-        self,
-        training_args: transformers.TrainingArguments,
-        dataset_train: Dataset,
-    ) -> None:
-        pass
-
     def _create_storage(self) -> None:
         """
         This method is used to initialize storage dir in the case you need to store logs/graphs/etc somewhere.

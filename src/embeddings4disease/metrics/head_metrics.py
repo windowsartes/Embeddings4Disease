@@ -76,9 +76,14 @@ class MetricComputerInterface(ABC):
         Returns:
             float: accuracy value.
         """
-        eps: float = 1e-9
 
-        return float(sum(np.logical_and(answer, predicted_tokens)) / (sum(np.logical_or(answer, predicted_tokens)) + eps))
+        numerator: float = float(sum(np.logical_and(answer, predicted_tokens)))
+        denominator: float = float(sum(np.logical_or(answer, predicted_tokens)))
+
+        if numerator == 0 and denominator == 0:
+            return 1.
+
+        return numerator/denominator
 
     @metric
     @staticmethod
